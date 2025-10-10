@@ -1,0 +1,34 @@
+export interface Student {
+  id: string;
+  name: string;
+  branch: string;
+  rollNumber: string;
+  registrationNumber: string;
+  year: string;
+  gender: string;
+  studentType: string;
+  hostel: string; // Can be empty if studentType is 'Day-Scholar'
+  contactNumber: string;
+  faceImage: string; // base64 data URL
+  faceFeatures: number[]; // A vector representing facial features
+}
+
+export enum OutingType {
+  LOCAL = 'Local',
+  NON_LOCAL = 'Non-Local',
+}
+
+export interface OutingRecord {
+  id: string;
+  studentId: string;
+  studentName: string;
+  rollNumber: string;
+  year: string;
+  gender: string;
+  studentType: string;
+  outingType: OutingType;
+  checkOutTime: string; // ISO string
+  checkInTime: string | null; // ISO string or null
+}
+
+export type View = 'dashboard' | 'kiosk' | 'register' | 'logbook' | 'allStudents';

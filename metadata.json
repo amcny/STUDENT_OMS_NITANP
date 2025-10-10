@@ -1,0 +1,7 @@
+{
+  "name": "Student Outing Management System",
+  "description": "A comprehensive outing management system for students featuring facial recognition for automated check-in and check-out, and a digital logbook to track all student movements.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
