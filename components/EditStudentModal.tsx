@@ -4,6 +4,7 @@ import Modal from './Modal';
 import CameraCapture from './CameraCapture';
 import Alert from './Alert';
 import { extractFaceFeatures } from '../services/facialRecognitionService';
+import CustomSelect from './CustomSelect';
 
 const BRANCH_OPTIONS = [
     'Biotechnology', 'Chemical Engineering', 'Civil Engineering',
@@ -21,7 +22,6 @@ const BOYS_HOSTELS = [
 const GIRLS_HOSTELS = [
     'Krishnaveni', 'Bhima', 'Thungabhadra', 'Ghataprabha', 'Munneru'
 ];
-
 
 interface EditStudentModalProps {
     isOpen: boolean;
@@ -44,14 +44,26 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
         setAlert(null);
     }, [student]);
 
+
     if (!isOpen || !formData) return null;
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         const uppercaseFields = ['name'];
         const processedValue = uppercaseFields.includes(name) ? value.toUpperCase() : value;
         
         setFormData(prev => prev ? { ...prev, [name]: processedValue } : null);
+    };
+
+    const handleSelectChange = (name: string, value: string) => {
+        setFormData(prev => {
+            if (!prev) return null;
+            const newState = { ...prev, [name]: value };
+            if (name === 'gender' || name === 'studentType') {
+                newState.hostel = '';
+            }
+            return newState;
+        });
     };
 
     const handleCapture = (imageBase64: string) => {
@@ -97,17 +109,17 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
     };
     
     const currentHostelOptions = formData.gender === 'Male' ? BOYS_HOSTELS : GIRLS_HOSTELS;
-    const baseFieldClasses = "w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 text-gray-800 shadow-sm transition duration-150 ease-in-out focus:bg-white";
+    const baseFieldClasses = "w-full px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 text-gray-800 shadow-sm transition duration-150 ease-in-out focus:bg-white";
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={`Edit Profile: ${student?.name}`}>
-            <div className="max-h-[80vh] overflow-y-auto pr-4">
+            <div className="max-h-[80vh] overflow-y-auto pr-4 -mr-4 pl-1">
                 {alert && <div className="mb-4"><Alert message={alert.message} type={alert.type} onClose={() => setAlert(null)} /></div>}
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label htmlFor="name" className="block text-gray-700 font-medium mb-1">Full Name</label>
-                            <input type="text" id="name" name="name" value={formData.name} onChange={handleChange} required className={`${baseFieldClasses} uppercase`} />
+                            <input type="text" id="name" name="name" value={formData.name} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} />
                         </div>
                         <div>
                             <label htmlFor="rollNumber" className="block text-gray-700 font-medium mb-1">Roll Number</label>
@@ -119,28 +131,15 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
                         </div>
                         <div>
                             <label htmlFor="contactNumber" className="block text-gray-700 font-medium mb-1">Contact Number</label>
-                            <input type="text" id="contactNumber" name="contactNumber" value={formData.contactNumber} onChange={handleChange} required className={baseFieldClasses} />
+                            <input type="text" id="contactNumber" name="contactNumber" value={formData.contactNumber} onChange={handleInputChange} required className={baseFieldClasses} />
                         </div>
-                        <div>
-                            <label htmlFor="branch" className="block text-gray-700 font-medium mb-1">Branch</label>
-                            <select id="branch" name="branch" value={formData.branch} onChange={handleChange} required className={baseFieldClasses}><option value="" disabled>Select Branch</option>{BRANCH_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select>
-                        </div>
-                        <div>
-                            <label htmlFor="year" className="block text-gray-700 font-medium mb-1">Year</label>
-                            <select id="year" name="year" value={formData.year} onChange={handleChange} required className={baseFieldClasses}><option value="" disabled>Select Year</option>{YEAR_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select>
-                        </div>
-                        <div>
-                            <label htmlFor="gender" className="block text-gray-700 font-medium mb-1">Gender</label>
-                            <select id="gender" name="gender" value={formData.gender} onChange={handleChange} required className={baseFieldClasses}><option value="" disabled>Select Gender</option>{GENDER_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select>
-                        </div>
-                        <div>
-                            <label htmlFor="studentType" className="block text-gray-700 font-medium mb-1">Student Type</label>
-                            <select id="studentType" name="studentType" value={formData.studentType} onChange={handleChange} required className={baseFieldClasses}><option value="" disabled>Select Type</option>{STUDENT_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select>
-                        </div>
+                        <CustomSelect name="branch" label="Branch" options={BRANCH_OPTIONS} value={formData.branch} onChange={handleSelectChange} required />
+                        <CustomSelect name="year" label="Year" options={YEAR_OPTIONS} value={formData.year} onChange={handleSelectChange} required />
+                        <CustomSelect name="gender" label="Gender" options={GENDER_OPTIONS} value={formData.gender} onChange={handleSelectChange} required />
+                        <CustomSelect name="studentType" label="Student Type" options={STUDENT_TYPE_OPTIONS} value={formData.studentType} onChange={handleSelectChange} required />
                         {formData.studentType === 'Hosteller' && (
                             <div className="md:col-span-2">
-                                <label htmlFor="hostel" className="block text-gray-700 font-medium mb-1">Hostel</label>
-                                <select id="hostel" name="hostel" value={formData.hostel} onChange={handleChange} required className={baseFieldClasses}><option value="" disabled>Select Hostel</option>{currentHostelOptions.map(o => <option key={o} value={o}>{o}</option>)}</select>
+                                <CustomSelect name="hostel" label="Hostel" options={currentHostelOptions} value={formData.hostel} onChange={handleSelectChange} required />
                             </div>
                         )}
                     </div>

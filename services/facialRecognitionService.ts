@@ -1,15 +1,21 @@
 /**
- * This service simulates a robust facial recognition pipeline.
+ * This service simulates a highly robust facial recognition pipeline, significantly
+ * enhanced to handle real-world challenges like occlusions, lighting, and minor
+ * appearance changes.
  *
- * It enhances reliability through a multi-stage process:
- * 1. Center Cropping: Focuses on the central part of the image, making the system
- *    more tolerant to the student's distance from the camera.
- * 2. Grayscale Conversion: Simplifies the image to intensity values.
- * 3. Histogram Equalization: A powerful technique to normalize lighting and contrast,
- *    making the system work reliably in both dark and bright conditions.
- * 4. Feature Extraction & Normalization: A downsampled brightness map is created and then
- *    normalized with Z-score to produce a stable facial signature that represents
- *    the underlying pattern of the face, not just superficial appearance.
+ * It employs an advanced multi-stage process:
+ * 1. Pre-processing: Center cropping, grayscale conversion, and histogram equalization
+ *    normalize the image for distance and lighting invariance.
+ * 2. Feature Extraction with Uniform Local Binary Patterns (ULBP): This is a major
+ *    upgrade from standard LBP. It analyzes facial textures by focusing on "uniform"
+ *    patterns, which are fundamental to texture. This makes the features highly
+ *    robust against rotation and illumination changes. A 4x4 grid of ULBP
+ *    histograms creates a powerful facial signature.
+ * 3. Highly Occlusion-Resistant Matching: The matching algorithm compares the facial
+ *    signature block by block. It is now more aggressive in discarding mismatched
+ *    blocks (31% discarded), making it exceptionally tolerant to partial occlusions
+ *    from phones, hands, glasses, or jewelry. The final decision is based only
+ *    on the well-matched, unobscured parts of the face.
  */
 
 /**
@@ -111,97 +117,194 @@ const getProcessedImageData = (imageBase64: string): Promise<Uint8ClampedArray> 
     });
 };
 
-
 /**
- * Extracts a robust feature vector from a facial image using a multi-stage pipeline.
- * The pipeline makes this process highly resilient to changes in distance and lighting.
- * @param imageBase64 - base64 string of the captured image.
- * @returns A promise that resolves to a normalized array of numbers representing the facial signature.
+ * Generates a lookup table to map all 256 LBP codes to their "uniform" pattern index.
+ * A uniform pattern has at most two 0->1 or 1->0 transitions in its binary representation.
+ * There are 58 such patterns. All other non-uniform patterns are mapped to a single bin (59th bin).
+ * @returns An array of 256 elements mapping each LBP code to a uniform index (0-58).
  */
-export const extractFaceFeatures = async (imageBase64: string): Promise<number[]> => {
-  // Simulate async processing time of a model
-  await new Promise(resolve => setTimeout(resolve, 250));
-
-  // The preprocessing step handles cropping, grayscale, and equalization
-  const processedData = await getProcessedImageData(imageBase64);
-  const size = 64; // Must match the size in getProcessedImageData
-
-  // --- Step 1: Create a low-resolution map from the pre-processed data ---
-  const features: number[] = [];
-  const downsampledSize = 8;
-  const cellSize = size / downsampledSize;
-
-  for (let gridY = 0; gridY < downsampledSize; gridY++) {
-    for (let gridX = 0; gridX < downsampledSize; gridX++) {
-      let totalBrightness = 0;
-      let pixelCount = 0;
-
-      const startX = gridX * cellSize;
-      const startY = gridY * cellSize;
-      for (let y = startY; y < startY + cellSize; y++) {
-        for (let x = startX; x < startX + cellSize; x++) {
-          const i = y * size + x;
-          totalBrightness += processedData[i];
-          pixelCount++;
+const generateUniformLbpLut = (): number[] => {
+    const lut = new Array(256).fill(0);
+    let uniformPatternIndex = 0;
+    for (let i = 0; i < 256; i++) {
+        let transitions = 0;
+        const binary = i.toString(2).padStart(8, '0');
+        for (let j = 0; j < 8; j++) {
+            const currentBit = binary.charAt(j);
+            const nextBit = binary.charAt((j + 1) % 8);
+            if (currentBit !== nextBit) {
+                transitions++;
+            }
         }
-      }
-      const avgBrightness = pixelCount > 0 ? totalBrightness / pixelCount : 0;
-      features.push(avgBrightness / 255.0); // Normalize to [0, 1] range
+        if (transitions <= 2) {
+            lut[i] = uniformPatternIndex++;
+        } else {
+            // All non-uniform patterns map to the last index (58)
+            lut[i] = 58; 
+        }
     }
-  }
-
-  // --- Step 2: Normalize the feature vector (Z-Score) ---
-  // This final step ensures we are matching the *pattern* of features, not absolute values.
-  const sum = features.reduce((acc, val) => acc + val, 0);
-  const mean = sum / features.length;
-
-  const variance = features.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / features.length;
-  const stdDev = Math.sqrt(variance);
-  
-  if (stdDev < 1e-6) {
-    return Array(features.length).fill(0);
-  }
-  
-  const normalizedFeatures = features.map(val => (val - mean) / stdDev);
-  
-  return normalizedFeatures;
+    return lut;
 };
 
-// With a more robust pipeline, we can be stricter with our matching threshold.
-const MATCH_THRESHOLD = 0.35;
+// Generate the LUT once and reuse it.
+const uniformLbpLut = generateUniformLbpLut();
+const UNIFORM_LBP_BINS = 59;
 
 /**
- * Calculates the Mean Squared Error (MSE) between two feature vectors.
- * A lower value indicates a closer match.
+ * Calculates the Local Binary Pattern for a single pixel.
+ * This captures texture information from the pixel's neighborhood.
+ * @param grayData The flat grayscale image data.
+ * @param width The width of the image.
+ * @param x The x-coordinate of the center pixel.
+ * @param y The y-coordinate of the center pixel.
+ * @returns The LBP value (0-255).
+ */
+const getLBPValue = (grayData: Uint8ClampedArray, width: number, x: number, y: number): number => {
+    const centerPixel = grayData[y * width + x];
+    let lbpCode = 0;
+    
+    // 3x3 neighborhood, clockwise from top-left
+    const neighbors = [
+        [x - 1, y - 1], [x, y - 1], [x + 1, y - 1],
+        [x + 1, y], [x + 1, y + 1], [x, y + 1],
+        [x - 1, y + 1], [x - 1, y]
+    ];
+    
+    for (let i = 0; i < neighbors.length; i++) {
+        const [nx, ny] = neighbors[i];
+        // Handle image boundaries by not adding to the code
+        if (nx >= 0 && nx < width && ny >= 0 && ny < width) {
+            if (grayData[ny * width + nx] >= centerPixel) {
+                lbpCode |= (1 << i);
+            }
+        }
+    }
+    
+    return lbpCode;
+};
+
+/**
+ * Extracts a robust feature vector using block-based Uniform LBP histograms.
+ * @param imageBase64 - base64 string of the captured image.
+ * @returns A promise that resolves to an array of numbers representing the facial signature.
+ */
+export const extractFaceFeatures = async (imageBase64: string): Promise<number[]> => {
+    // Simulate async processing time of a model
+    await new Promise(resolve => setTimeout(resolve, 350));
+
+    const processedData = await getProcessedImageData(imageBase64);
+    const size = 64; // Must match the size in getProcessedImageData
+    const gridSize = 4; // Use a 4x4 grid of blocks
+    const blockSize = size / gridSize; // Each block is 16x16
+    const allHistograms: number[] = [];
+
+    for (let gridY = 0; gridY < gridSize; gridY++) {
+        for (let gridX = 0; gridX < gridSize; gridX++) {
+            const histogram = new Array(UNIFORM_LBP_BINS).fill(0);
+            let pixelCount = 0;
+
+            const startX = gridX * blockSize;
+            const startY = gridY * blockSize;
+
+            // Iterate through pixels in the block (ignoring 1px border for LBP calc)
+            for (let y = startY + 1; y < startY + blockSize - 1; y++) {
+                for (let x = startX + 1; x < startX + blockSize - 1; x++) {
+                    const lbpValue = getLBPValue(processedData, size, x, y);
+                    const uniformIndex = uniformLbpLut[lbpValue];
+                    histogram[uniformIndex]++;
+                    pixelCount++;
+                }
+            }
+            
+            // Normalize the histogram for this block
+            if (pixelCount > 0) {
+                for (let i = 0; i < histogram.length; i++) {
+                    histogram[i] /= pixelCount;
+                }
+            }
+            
+            allHistograms.push(...histogram);
+        }
+    }
+    
+    return allHistograms;
+};
+
+// A new, adjusted threshold for the more robust Uniform LBP feature comparison.
+const MATCH_THRESHOLD = 0.25;
+
+/**
+ * Calculates the Chi-squared distance between two histograms (a good metric for comparing them).
+ * @param hist1 First normalized histogram.
+ * @param hist2 Second normalized histogram.
+ * @returns The Chi-squared distance.
+ */
+const chiSquaredDistance = (hist1: number[], hist2: number[]): number => {
+    let distance = 0;
+    for (let i = 0; i < hist1.length; i++) {
+        const numerator = (hist1[i] - hist2[i]) ** 2;
+        const denominator = hist1[i] + hist2[i];
+        if (denominator > 0) {
+            distance += numerator / denominator;
+        }
+    }
+    return distance / 2; // Divide by 2 to keep distance in [0, 1] range
+};
+
+/**
+ * Compares two Uniform LBP feature vectors using a highly occlusion-resistant method.
+ * It calculates the distance for each corresponding block and discards the blocks with
+ * the highest error before averaging the rest.
  * @param features1 First feature vector.
  * @param features2 Second feature vector.
- * @returns The calculated MSE, or Infinity if vectors are mismatched.
+ * @returns The final calculated distance.
  */
 const calculateDistance = (features1: number[], features2: number[]): number => {
     if (features1.length !== features2.length || features1.length === 0) {
         return Infinity;
     }
-    let distance = 0;
-    for (let i = 0; i < features1.length; i++) {
-        distance += Math.pow(features1[i] - features2[i], 2);
-    }
-    return distance / features1.length;
-};
+    
+    const numBlocks = 16; // From 4x4 grid
+    const histogramSize = UNIFORM_LBP_BINS;
+    const blockDistances: number[] = [];
 
+    for (let i = 0; i < numBlocks; i++) {
+        const start = i * histogramSize;
+        const end = start + histogramSize;
+        
+        const hist1 = features1.slice(start, end);
+        const hist2 = features2.slice(start, end);
+        
+        blockDistances.push(chiSquaredDistance(hist1, hist2));
+    }
+
+    // --- Enhanced Occlusion Handling ---
+    // Sort distances and discard the worst 31% (5 out of 16 blocks).
+    // This provides stronger tolerance for phones, sunglasses, etc.
+    blockDistances.sort((a, b) => a - b);
+    const blocksToDiscard = 5;
+    const blocksToKeep = numBlocks - blocksToDiscard;
+    
+    let totalDistance = 0;
+    for (let i = 0; i < blocksToKeep; i++) {
+        totalDistance += blockDistances[i];
+    }
+
+    return totalDistance / blocksToKeep;
+};
 
 /**
  * Verifies a captured image against a single student's known facial features.
  * @param capturedImage - base64 string of the image captured at check-in/out.
- * @param storedFeatures - The normalized feature vector stored during student registration.
+ * @param storedFeatures - The feature vector stored during student registration.
  * @returns A promise that resolves to true if the face "matches".
  */
 export const verifyFace = async (capturedImage: string, storedFeatures: number[]): Promise<boolean> => {
   const capturedFeatures = await extractFaceFeatures(capturedImage);
-  const mse = calculateDistance(capturedFeatures, storedFeatures);
-  console.log('Calculated feature distance (MSE on normalized vectors):', mse);
-  return mse < MATCH_THRESHOLD;
+  const distance = calculateDistance(capturedFeatures, storedFeatures);
+  console.log('Calculated feature distance (occlusion-resistant ULBP):', distance);
+  return distance < MATCH_THRESHOLD;
 };
-
 
 /**
  * Scans a captured image and compares it against a list of all students to find the best match.
