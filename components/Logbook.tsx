@@ -5,6 +5,9 @@ import StudentProfileModal from './StudentProfileModal';
 import RemarksModal from './RemarksModal';
 import ConfirmationModal from './ConfirmationModal';
 
+// Allow TypeScript to recognize the XLSX global variable from the script tag
+declare var XLSX: any;
+
 type SortKey = 'studentName' | 'rollNumber' | 'year' | 'gender' | 'outingType' | 'checkOutTime' | 'checkInTime';
 type SortDirection = 'ascending' | 'descending';
 
@@ -135,6 +138,54 @@ const Logbook: React.FC = () => {
     return filtered;
   }, [outingLogs, filter, searchTerm, sortConfig]);
 
+  const handleExportToExcel = () => {
+    if (typeof XLSX === 'undefined') {
+        console.error("XLSX library is not loaded.");
+        alert("Could not export to Excel. The required library is missing.");
+        return;
+    }
+
+    const studentMap = new Map(students.map(s => [s.id, s]));
+
+    const dataToExport = sortedAndFilteredLogs.map(log => {
+        const student = studentMap.get(log.studentId);
+        return {
+            "Student Name": log.studentName,
+            "Roll Number": log.rollNumber,
+            "Year": log.year,
+            "Gender": log.gender,
+            "Contact Number": student?.contactNumber || 'N/A',
+            "Student Type": log.studentType,
+            "Hostel": log.studentType === 'Hosteller' ? (student?.hostel || 'N/A') : 'Day-Scholar',
+            "Outing Type": log.outingType,
+            "Check-Out Time": formatDateTime(log.checkOutTime),
+            "Check-In Time": formatDateTime(log.checkInTime),
+            "Status": log.checkInTime ? 'Completed' : 'Out',
+            "Remarks": log.remarks || '',
+        };
+    });
+
+    if (dataToExport.length === 0) {
+        alert("No data to export.");
+        return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Student Outing Logs");
+
+    // Auto-size columns for better readability
+    const colWidths = Object.keys(dataToExport[0]).map(key => ({
+        wch: Math.max(
+            key.length,
+            ...dataToExport.map(row => (row[key as keyof typeof row] || '').toString().length)
+        ) + 2 // add a little extra padding
+    }));
+    worksheet["!cols"] = colWidths;
+
+    XLSX.writeFile(workbook, "Student_Outing_Logbook.xlsx");
+  };
+
   return (
     <>
       <div className="bg-white p-8 rounded-lg shadow-lg max-w-7xl mx-auto">
@@ -146,7 +197,7 @@ const Logbook: React.FC = () => {
             <button onClick={() => setFilter('active')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'active' ? 'bg-yellow-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Active Outings</button>
             <button onClick={() => setFilter('completed')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'completed' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Completed</button>
           </div>
-          <div className="relative w-full md:w-auto">
+          <div className="flex items-center space-x-4 w-full md:w-auto">
             <input
               type="text"
               placeholder="Search Student..."
@@ -154,6 +205,16 @@ const Logbook: React.FC = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full md:w-80 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-100 text-gray-800 shadow-sm transition duration-150 ease-in-out focus:bg-white"
             />
+             <button
+              onClick={handleExportToExcel}
+              className="flex-shrink-0 flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors"
+              title="Export current view to Excel"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 9.293a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+              <span>Export</span>
+            </button>
           </div>
         </div>
 
