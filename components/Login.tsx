@@ -29,6 +29,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('Invalid username or password.');
   };
 
+  const baseFieldClasses = "w-full px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 text-gray-800 shadow-sm transition duration-150 ease-in-out focus:bg-white";
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
       <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-xl shadow-lg">
@@ -39,29 +41,29 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-                <label htmlFor="username" className="sr-only">Username</label>
+                <label htmlFor="username" className="block text-gray-700 font-medium mb-1">Username</label>
                 <input 
                     id="username" 
                     name="username" 
                     type="text" 
                     autoComplete="username" 
                     required 
-                    className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                    placeholder="Username (e.g., FRONTGATE)"
+                    className={`${baseFieldClasses} uppercase`}
+                    placeholder="e.g., FRONTGATE"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                 />
             </div>
             <div>
-                <label htmlFor="password" className="sr-only">Password</label>
+                <label htmlFor="password" className="block text-gray-700 font-medium mb-1">Password</label>
                 <input 
                     id="password" 
                     name="password" 
                     type="password" 
                     autoComplete="current-password" 
                     required 
-                    className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                    placeholder="Password"
+                    className={baseFieldClasses}
+                    placeholder="Enter password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                 />

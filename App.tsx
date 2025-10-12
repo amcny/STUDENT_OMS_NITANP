@@ -48,7 +48,7 @@ const App: React.FC = () => {
       case 'register':
         return <RegisterStudent />;
       case 'logbook':
-        return <Logbook />;
+        return <Logbook gate={gate!} />;
       case 'allStudents':
         return <AllStudents onViewChange={setCurrentView} />;
       default:

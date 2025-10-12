@@ -33,7 +33,11 @@ const SortableHeader: React.FC<{
   );
 };
 
-const Logbook: React.FC = () => {
+interface LogbookProps {
+  gate: string;
+}
+
+const Logbook: React.FC<LogbookProps> = ({ gate }) => {
   const { outingLogs, students, setOutingLogs } = useContext(AppContext);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,6 +49,8 @@ const Logbook: React.FC = () => {
     key: 'checkOutTime',
     direction: 'descending',
   });
+
+  const studentMap = useMemo(() => new Map<string, Student>(students.map(s => [s.id, s])), [students]);
 
   const formatDateTime = (isoString: string | null) => {
     if (!isoString) return 'N/A';
@@ -85,13 +91,13 @@ const Logbook: React.FC = () => {
     setOutingLogs(prevLogs =>
         prevLogs.map(log => {
             if (log.id === logToToggleStatus.id) {
-                // When reverting, we should clear the checkInGate as well.
-                // When manually checking in, we can't know the gate, so we leave it null.
+                // When reverting, clear checkInTime and checkInGate.
+                // When manually checking in, set checkInTime and record the current gate.
                 const isReverting = !!log.checkInTime;
                 return {
                     ...log,
                     checkInTime: isReverting ? null : new Date().toISOString(),
-                    checkInGate: isReverting ? null : log.checkInGate, 
+                    checkInGate: isReverting ? null : gate, 
                 };
             }
             return log;
@@ -109,11 +115,14 @@ const Logbook: React.FC = () => {
       })
       .filter(log => {
           const term = searchTerm.toLowerCase();
+          const student = studentMap.get(log.studentId);
+          const hostel = log.studentType === 'Hosteller' ? (student?.hostel || '') : '';
           return (
               log.studentName.toLowerCase().includes(term) ||
               log.rollNumber.toLowerCase().includes(term) ||
               log.year.toLowerCase().includes(term) ||
               log.gender.toLowerCase().includes(term) ||
+              hostel.toLowerCase().includes(term) ||
               log.studentType.toLowerCase().includes(term) ||
               (log.checkOutGate && log.checkOutGate.toLowerCase().includes(term)) ||
               (log.checkInGate && log.checkInGate.toLowerCase().includes(term))
@@ -142,7 +151,7 @@ const Logbook: React.FC = () => {
     });
 
     return filtered;
-  }, [outingLogs, filter, searchTerm, sortConfig]);
+  }, [outingLogs, filter, searchTerm, sortConfig, studentMap]);
 
   const handleExportToExcel = () => {
     if (typeof XLSX === 'undefined') {
@@ -150,8 +159,6 @@ const Logbook: React.FC = () => {
         alert("Could not export to Excel. The required library is missing.");
         return;
     }
-
-    const studentMap = new Map<string, Student>(students.map(s => [s.id, s]));
 
     const dataToExport = sortedAndFilteredLogs.map(log => {
         const student = studentMap.get(log.studentId);
@@ -195,7 +202,7 @@ const Logbook: React.FC = () => {
 
   return (
     <>
-      <div className="bg-white p-8 rounded-lg shadow-lg max-w-7xl mx-auto">
+      <div className="bg-white p-8 rounded-lg shadow-lg max-w-screen-2xl mx-auto">
         <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Outing Logbook</h2>
 
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
@@ -232,6 +239,8 @@ const Logbook: React.FC = () => {
                 <SortableHeader label="Student Name" sortKey="studentName" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader label="Roll Number" sortKey="rollNumber" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader label="Year" sortKey="year" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Gender" sortKey="gender" sortConfig={sortConfig} onSort={handleSort} />
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Hostel</th>
                 <SortableHeader label="Outing Type" sortKey="outingType" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader label="Check-Out Time" sortKey="checkOutTime" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader label="Check-Out Gate" sortKey="checkOutGate" sortConfig={sortConfig} onSort={handleSort} />
@@ -244,59 +253,66 @@ const Logbook: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {sortedAndFilteredLogs.length > 0 ? (
-                sortedAndFilteredLogs.map((log: OutingRecord) => (
-                  <tr key={log.id} className="hover:bg-gray-50">
-                    <td 
-                      className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:underline cursor-pointer"
-                      onClick={() => handleStudentClick(log.studentId)}
-                    >
-                      {log.studentName}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.rollNumber}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.year}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.outingType}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.checkOutTime)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.checkOutGate}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.checkInTime)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.checkInGate || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {log.checkInTime ? (
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                          Completed
-                        </span>
-                      ) : (
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                          Out
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 max-w-[200px] truncate" title={log.remarks}>
-                        {log.remarks || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center space-x-4">
-                            {log.checkInTime ? (
-                                <button onClick={() => setLogToToggleStatus(log)} className="text-gray-500 hover:text-yellow-600 transition-colors" title="Revert to 'Out'">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.707-10.293a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L9.414 11H13a1 1 0 100-2H9.414l1.293-1.293z" clipRule="evenodd" /></svg>
+                sortedAndFilteredLogs.map((log: OutingRecord) => {
+                  const student = studentMap.get(log.studentId);
+                  return (
+                    <tr key={log.id} className="hover:bg-gray-50">
+                        <td 
+                        className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:underline cursor-pointer"
+                        onClick={() => handleStudentClick(log.studentId)}
+                        >
+                        {log.studentName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.rollNumber}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.year}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.gender}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {log.studentType === 'Hosteller' ? (student?.hostel || 'N/A') : 'Day-Scholar'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.outingType}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.checkOutTime)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.checkOutGate}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.checkInTime)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.checkInGate || 'N/A'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {log.checkInTime ? (
+                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                            Completed
+                            </span>
+                        ) : (
+                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                            Out
+                            </span>
+                        )}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500 max-w-[200px] truncate" title={log.remarks}>
+                            {log.remarks || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex items-center space-x-4">
+                                {log.checkInTime ? (
+                                    <button onClick={() => setLogToToggleStatus(log)} className="text-gray-500 hover:text-yellow-600 transition-colors" title="Revert to 'Out'">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.707-10.293a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L9.414 11H13a1 1 0 100-2H9.414l1.293-1.293z" clipRule="evenodd" /></svg>
+                                    </button>
+                                ) : (
+                                    <button onClick={() => setLogToToggleStatus(log)} className="text-gray-500 hover:text-green-600 transition-colors" title="Manual Check-In">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                    </button>
+                                )}
+                                <button onClick={() => setLogToEditRemarks(log)} className="text-gray-500 hover:text-indigo-600 transition-colors" title="Edit Remarks">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" /></svg>
                                 </button>
-                            ) : (
-                                <button onClick={() => setLogToToggleStatus(log)} className="text-gray-500 hover:text-green-600 transition-colors" title="Manual Check-In">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                <button onClick={() => setLogToDelete(log)} className="text-gray-500 hover:text-red-600 transition-colors" title="Delete Log">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
                                 </button>
-                            )}
-                            <button onClick={() => setLogToEditRemarks(log)} className="text-gray-500 hover:text-indigo-600 transition-colors" title="Edit Remarks">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" /></svg>
-                            </button>
-                            <button onClick={() => setLogToDelete(log)} className="text-gray-500 hover:text-red-600 transition-colors" title="Delete Log">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
-                            </button>
-                        </div>
-                    </td>
-                  </tr>
-                ))
+                            </div>
+                        </td>
+                    </tr>
+                  )
+                })
               ) : (
                 <tr>
-                  <td colSpan={11} className="text-center py-10 text-gray-500">
+                  <td colSpan={13} className="text-center py-10 text-gray-500">
                     No logs found matching your criteria.
                   </td>
                 </tr>
