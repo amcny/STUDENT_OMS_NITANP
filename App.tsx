@@ -6,6 +6,7 @@ import Logbook from './components/Logbook';
 import Dashboard from './components/Dashboard';
 import AllStudents from './components/AllStudents';
 import Footer from './components/Footer';
+import Login from './components/Login';
 import { Student, OutingRecord, View } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
 import { STUDENTS_STORAGE_KEY, OUTING_LOGS_STORAGE_key } from './constants';
@@ -28,13 +29,22 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [students, setStudents] = useLocalStorage<Student[]>(STUDENTS_STORAGE_KEY, []);
   const [outingLogs, setOutingLogs] = useLocalStorage<OutingRecord[]>(OUTING_LOGS_STORAGE_key, []);
+  const [gate, setGate] = useState<string | null>(null);
+
+  const handleLogin = (gateName: string) => {
+    setGate(gateName);
+  };
+
+  const handleLogout = () => {
+    setGate(null);
+  };
 
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
         return <Dashboard onViewChange={setCurrentView} />;
       case 'kiosk':
-        return <OutingKiosk />;
+        return <OutingKiosk gate={gate!} />;
       case 'register':
         return <RegisterStudent />;
       case 'logbook':
@@ -46,10 +56,14 @@ const App: React.FC = () => {
     }
   };
 
+  if (!gate) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   return (
     <AppContext.Provider value={{ students, setStudents, outingLogs, setOutingLogs }}>
       <div className="min-h-screen bg-slate-100 flex flex-col">
-        <Header currentView={currentView} onViewChange={setCurrentView} />
+        <Header currentView={currentView} onViewChange={setCurrentView} gate={gate} onLogout={handleLogout} />
         <main className="container mx-auto p-6 flex-grow">
           {renderView()}
         </main>

@@ -8,7 +8,7 @@ import ConfirmationModal from './ConfirmationModal';
 // Allow TypeScript to recognize the XLSX global variable from the script tag
 declare var XLSX: any;
 
-type SortKey = 'studentName' | 'rollNumber' | 'year' | 'gender' | 'outingType' | 'checkOutTime' | 'checkInTime';
+type SortKey = 'studentName' | 'rollNumber' | 'year' | 'gender' | 'outingType' | 'checkOutTime' | 'checkInTime' | 'checkOutGate' | 'checkInGate';
 type SortDirection = 'ascending' | 'descending';
 
 const SortableHeader: React.FC<{
@@ -85,9 +85,13 @@ const Logbook: React.FC = () => {
     setOutingLogs(prevLogs =>
         prevLogs.map(log => {
             if (log.id === logToToggleStatus.id) {
+                // When reverting, we should clear the checkInGate as well.
+                // When manually checking in, we can't know the gate, so we leave it null.
+                const isReverting = !!log.checkInTime;
                 return {
                     ...log,
-                    checkInTime: log.checkInTime ? null : new Date().toISOString()
+                    checkInTime: isReverting ? null : new Date().toISOString(),
+                    checkInGate: isReverting ? null : log.checkInGate, 
                 };
             }
             return log;
@@ -110,7 +114,9 @@ const Logbook: React.FC = () => {
               log.rollNumber.toLowerCase().includes(term) ||
               log.year.toLowerCase().includes(term) ||
               log.gender.toLowerCase().includes(term) ||
-              log.studentType.toLowerCase().includes(term)
+              log.studentType.toLowerCase().includes(term) ||
+              (log.checkOutGate && log.checkOutGate.toLowerCase().includes(term)) ||
+              (log.checkInGate && log.checkInGate.toLowerCase().includes(term))
           );
       });
 
@@ -119,7 +125,7 @@ const Logbook: React.FC = () => {
         let valA: string | number | null = a[key];
         let valB: string | number | null = b[key];
 
-        if (key === 'checkInTime') {
+        if (key === 'checkInTime' || key === 'checkInGate') {
             if (valA === null && valB !== null) return sortConfig.direction === 'ascending' ? 1 : -1;
             if (valA !== null && valB === null) return sortConfig.direction === 'ascending' ? -1 : 1;
             if (valA === null && valB === null) return 0;
@@ -130,8 +136,8 @@ const Logbook: React.FC = () => {
             valB = new Date(valB as string).getTime();
         }
 
-        if (valA < valB) return sortConfig.direction === 'ascending' ? -1 : 1;
-        if (valA > valB) return sortConfig.direction === 'ascending' ? 1 : -1;
+        if (valA! < valB!) return sortConfig.direction === 'ascending' ? -1 : 1;
+        if (valA! > valB!) return sortConfig.direction === 'ascending' ? 1 : -1;
         return 0;
     });
 
@@ -145,7 +151,6 @@ const Logbook: React.FC = () => {
         return;
     }
 
-    // Fix: Explicitly type the Map to ensure `studentMap.get` returns `Student | undefined` instead of `unknown`.
     const studentMap = new Map<string, Student>(students.map(s => [s.id, s]));
 
     const dataToExport = sortedAndFilteredLogs.map(log => {
@@ -160,7 +165,9 @@ const Logbook: React.FC = () => {
             "Hostel": log.studentType === 'Hosteller' ? (student?.hostel || 'N/A') : 'Day-Scholar',
             "Outing Type": log.outingType,
             "Check-Out Time": formatDateTime(log.checkOutTime),
+            "Check-Out Gate": log.checkOutGate,
             "Check-In Time": formatDateTime(log.checkInTime),
+            "Check-In Gate": log.checkInGate || 'N/A',
             "Status": log.checkInTime ? 'Completed' : 'Out',
             "Remarks": log.remarks || '',
         };
@@ -175,12 +182,11 @@ const Logbook: React.FC = () => {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Student Outing Logs");
 
-    // Auto-size columns for better readability
     const colWidths = Object.keys(dataToExport[0]).map(key => ({
         wch: Math.max(
             key.length,
             ...dataToExport.map(row => (row[key as keyof typeof row] || '').toString().length)
-        ) + 2 // add a little extra padding
+        ) + 2
     }));
     worksheet["!cols"] = colWidths;
 
@@ -226,11 +232,11 @@ const Logbook: React.FC = () => {
                 <SortableHeader label="Student Name" sortKey="studentName" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader label="Roll Number" sortKey="rollNumber" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader label="Year" sortKey="year" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Gender" sortKey="gender" sortConfig={sortConfig} onSort={handleSort} />
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Student Type</th>
                 <SortableHeader label="Outing Type" sortKey="outingType" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader label="Check-Out Time" sortKey="checkOutTime" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Check-Out Gate" sortKey="checkOutGate" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader label="Check-In Time" sortKey="checkInTime" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader label="Check-In Gate" sortKey="checkInGate" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Remarks</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Actions</th>
@@ -248,11 +254,11 @@ const Logbook: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.rollNumber}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.year}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.gender}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.studentType}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.outingType}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.checkOutTime)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.checkOutGate}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.checkInTime)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.checkInGate || 'N/A'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       {log.checkInTime ? (
                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">

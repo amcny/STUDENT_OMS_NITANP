@@ -30,6 +30,8 @@ export interface OutingRecord {
   checkOutTime: string; // ISO string
   checkInTime: string | null; // ISO string or null
   remarks?: string;
+  checkOutGate: string;
+  checkInGate: string | null;
 }
 
 export type View = 'dashboard' | 'kiosk' | 'register' | 'logbook' | 'allStudents';

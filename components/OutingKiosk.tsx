@@ -10,7 +10,11 @@ import Alert from './Alert';
 type Action = 'check-in' | 'check-out';
 const MAX_SCAN_ATTEMPTS = 3;
 
-const OutingKiosk: React.FC = () => {
+interface OutingKioskProps {
+    gate: string;
+}
+
+const OutingKiosk: React.FC<OutingKioskProps> = ({ gate }) => {
   const { students, outingLogs, setOutingLogs } = useContext(AppContext);
   const [outingType, setOutingType] = useState<OutingType>(OutingType.LOCAL);
   const [isLoading, setIsLoading] = useState(false);
@@ -81,6 +85,8 @@ const OutingKiosk: React.FC = () => {
         outingType,
         checkOutTime: new Date().toISOString(),
         checkInTime: null,
+        checkOutGate: gate,
+        checkInGate: null,
     };
 
     setOutingLogs(prevLogs => [newLog, ...prevLogs]);
@@ -103,6 +109,7 @@ const OutingKiosk: React.FC = () => {
     updatedLogs[activeLogIndex] = {
         ...updatedLogs[activeLogIndex],
         checkInTime: new Date().toISOString(),
+        checkInGate: gate,
     };
 
     setOutingLogs(updatedLogs);
