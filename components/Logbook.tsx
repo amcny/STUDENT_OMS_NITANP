@@ -145,7 +145,8 @@ const Logbook: React.FC = () => {
         return;
     }
 
-    const studentMap = new Map(students.map(s => [s.id, s]));
+    // Fix: Explicitly type the Map to ensure `studentMap.get` returns `Student | undefined` instead of `unknown`.
+    const studentMap = new Map<string, Student>(students.map(s => [s.id, s]));
 
     const dataToExport = sortedAndFilteredLogs.map(log => {
         const student = studentMap.get(log.studentId);
