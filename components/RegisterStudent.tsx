@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import { Student } from '../types';
 import Modal from './Modal';
 import CameraCapture from './CameraCapture';
@@ -35,6 +35,7 @@ const RegisterStudent: React.FC = () => {
   const [alert, setAlert] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
   const [isHostelDropdownOpen, setIsHostelDropdownOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (formData.studentType === 'Day-Scholar' && formData.hostel !== '') {
@@ -66,11 +67,40 @@ const RegisterStudent: React.FC = () => {
     setIsCameraOpen(false);
   };
 
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        if (!file.type.startsWith('image/')) {
+            setAlert({ message: 'Please select a valid image file.', type: 'error' });
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+             setAlert({ message: 'File is too large. Please select an image under 5MB.', type: 'error' });
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            setFaceImage(reader.result as string);
+        };
+        reader.onerror = () => {
+            setAlert({ message: 'Failed to read the image file.', type: 'error' });
+        };
+        reader.readAsDataURL(file);
+    }
+    // Reset file input to allow selecting the same file again
+    e.target.value = '';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAlert(null);
     if (!faceImage) {
-      setAlert({ message: 'Please capture a face image.', type: 'error' });
+      setAlert({ message: 'Please capture or upload a face image.', type: 'error' });
       return;
     }
     
@@ -186,14 +216,24 @@ const RegisterStudent: React.FC = () => {
         <section>
             <h3 className="text-xl font-bold text-slate-700 mb-4 border-l-4 border-blue-500 pl-3">Biometric Registration</h3>
             <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-start space-y-4 sm:space-y-0 sm:space-x-6 bg-slate-50 p-6 rounded-lg border">
-                <button
-                    type="button"
-                    onClick={() => setIsCameraOpen(true)}
-                    className="bg-indigo-600 text-white font-bold py-3 px-5 rounded-lg hover:bg-indigo-700 transition duration-300 flex items-center space-x-2 shadow-md hover:shadow-lg"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                    <span>{faceImage ? 'Retake Face Image' : 'Capture Face Image'}</span>
-                </button>
+                <div className="flex flex-col space-y-3">
+                    <button
+                        type="button"
+                        onClick={() => setIsCameraOpen(true)}
+                        className="bg-indigo-600 text-white font-bold py-3 px-5 rounded-lg hover:bg-indigo-700 transition duration-300 flex items-center justify-center space-x-2 shadow-md hover:shadow-lg w-60"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        <span>{faceImage ? 'Retake with Camera' : 'Capture with Camera'}</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleUploadClick}
+                        className="bg-slate-600 text-white font-bold py-3 px-5 rounded-lg hover:bg-slate-700 transition duration-300 flex items-center justify-center space-x-2 shadow-md hover:shadow-lg w-60"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                        <span>Upload an Image</span>
+                    </button>
+                </div>
                 <div className="w-28 h-28 bg-gray-200 rounded-full flex items-center justify-center border-2 border-dashed border-gray-400 overflow-hidden">
                     {faceImage ? (
                         <img src={faceImage} alt="Captured face" className="w-full h-full object-cover" />
@@ -201,6 +241,13 @@ const RegisterStudent: React.FC = () => {
                         <span className="text-xs text-gray-500 text-center">Image Preview</span>
                     )}
                 </div>
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept="image/png, image/jpeg, image/webp"
+                    onChange={handleFileSelect}
+                />
             </div>
         </section>
 
