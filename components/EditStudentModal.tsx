@@ -50,7 +50,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        const uppercaseFields = ['name'];
+        const uppercaseFields = ['name', 'roomNumber'];
         const processedValue = uppercaseFields.includes(name) ? value.toUpperCase() : value;
         
         setFormData(prev => prev ? { ...prev, [name]: processedValue } : null);
@@ -62,6 +62,9 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
             const newState = { ...prev, [name]: value };
             if (name === 'gender' || name === 'studentType') {
                 newState.hostel = '';
+            }
+             if (name === 'studentType' && value === 'Day-Scholar') {
+                newState.roomNumber = '';
             }
             return newState;
         });
@@ -168,9 +171,13 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
                         <CustomSelect name="gender" label="Gender" options={GENDER_OPTIONS} value={formData.gender} onChange={handleSelectChange} required />
                         <CustomSelect name="studentType" label="Student Type" options={STUDENT_TYPE_OPTIONS} value={formData.studentType} onChange={handleSelectChange} required />
                         {formData.studentType === 'Hosteller' && (
-                            <div className="md:col-span-2">
-                                <CustomSelect name="hostel" label="Hostel" options={currentHostelOptions} value={formData.hostel} onChange={handleSelectChange} required />
+                           <>
+                             <CustomSelect name="hostel" label="Hostel" options={currentHostelOptions} value={formData.hostel} onChange={handleSelectChange} required />
+                             <div>
+                                <label htmlFor="roomNumber" className="block text-gray-700 font-medium mb-1">Room Number</label>
+                                <input type="text" id="roomNumber" name="roomNumber" value={formData.roomNumber} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} />
                             </div>
+                           </>
                         )}
                     </div>
 

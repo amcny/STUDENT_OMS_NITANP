@@ -8,6 +8,7 @@ export interface Student {
   gender: string;
   studentType: string;
   hostel: string; // Can be empty if studentType is 'Day-Scholar'
+  roomNumber: string; // Can be empty if studentType is 'Day-Scholar'
   contactNumber: string;
   faceImage: string; // base64 data URL
   faceFeatures: number[]; // A vector representing facial features

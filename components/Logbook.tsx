@@ -1,9 +1,11 @@
 import React, { useContext, useState, useMemo } from 'react';
 import { AppContext } from '../App';
-import { OutingRecord, Student } from '../types';
+import { OutingRecord, Student, OutingType } from '../types';
 import StudentProfileModal from './StudentProfileModal';
 import RemarksModal from './RemarksModal';
 import ConfirmationModal from './ConfirmationModal';
+import Alert from './Alert';
+import CustomSelect from './CustomSelect';
 
 // Allow TypeScript to recognize the XLSX global variable from the script tag
 declare var XLSX: any;
@@ -49,6 +51,11 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     key: 'checkOutTime',
     direction: 'descending',
   });
+  
+  const [manualSearchTerm, setManualSearchTerm] = useState('');
+  const [manualOutingType, setManualOutingType] = useState<OutingType>(OutingType.LOCAL);
+  const [manualEntryAlert, setManualEntryAlert] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
 
   const studentMap = useMemo(() => new Map<string, Student>(students.map(s => [s.id, s])), [students]);
 
@@ -91,8 +98,6 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     setOutingLogs(prevLogs =>
         prevLogs.map(log => {
             if (log.id === logToToggleStatus.id) {
-                // When reverting, clear checkInTime and checkInGate.
-                // When manually checking in, set checkInTime and record the current gate.
                 const isReverting = !!log.checkInTime;
                 return {
                     ...log,
@@ -106,6 +111,52 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     setLogToToggleStatus(null);
   };
 
+  const handleManualEntry = (action: 'check-out' | 'check-in') => {
+    setManualEntryAlert(null);
+    const term = manualSearchTerm.trim().toUpperCase();
+    if (!term) {
+        setManualEntryAlert({ message: "Please enter a student's Roll Number or Registration Number.", type: 'error'});
+        return;
+    }
+
+    const student = students.find(s => s.rollNumber.toUpperCase() === term || s.registrationNumber.toUpperCase() === term);
+    if (!student) {
+        setManualEntryAlert({ message: `No student found with identifier "${manualSearchTerm}".`, type: 'error'});
+        return;
+    }
+
+    if (action === 'check-out') {
+        const hasActiveOuting = outingLogs.some(log => log.studentId === student.id && log.checkInTime === null);
+        if (hasActiveOuting) {
+            setManualEntryAlert({ message: `${student.name} already has an active outing.`, type: 'error' });
+            return;
+        }
+
+        const newLog: OutingRecord = {
+            id: crypto.randomUUID(),
+            studentId: student.id, studentName: student.name, rollNumber: student.rollNumber,
+            year: student.year, gender: student.gender, studentType: student.studentType,
+            outingType: manualOutingType, checkOutTime: new Date().toISOString(),
+            checkInTime: null, checkOutGate: gate, checkInGate: null,
+            remarks: 'Manual Entry by Admin'
+        };
+        setOutingLogs(prev => [newLog, ...prev]);
+        setManualEntryAlert({ message: `${student.name} checked out successfully.`, type: 'success'});
+
+    } else { // Check-in
+        const activeLogIndex = outingLogs.findIndex(log => log.studentId === student.id && log.checkInTime === null);
+        if (activeLogIndex === -1) {
+            setManualEntryAlert({ message: `No active outing found for ${student.name}.`, type: 'error' });
+            return;
+        }
+        const updatedLogs = [...outingLogs];
+        updatedLogs[activeLogIndex] = { ...updatedLogs[activeLogIndex], checkInTime: new Date().toISOString(), checkInGate: gate, remarks: updatedLogs[activeLogIndex].remarks ? `${updatedLogs[activeLogIndex].remarks}; Manual Check-In` : 'Manual Check-In by Admin' };
+        setOutingLogs(updatedLogs);
+        setManualEntryAlert({ message: `${student.name} checked in successfully.`, type: 'success'});
+    }
+    setManualSearchTerm('');
+  };
+
   const sortedAndFilteredLogs = useMemo(() => {
     let filtered = outingLogs
       .filter(log => {
@@ -117,12 +168,14 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
           const term = searchTerm.toLowerCase();
           const student = studentMap.get(log.studentId);
           const hostel = log.studentType === 'Hosteller' ? (student?.hostel || '') : '';
+          const room = log.studentType === 'Hosteller' ? (student?.roomNumber || '') : '';
           return (
               log.studentName.toLowerCase().includes(term) ||
               log.rollNumber.toLowerCase().includes(term) ||
               log.year.toLowerCase().includes(term) ||
               log.gender.toLowerCase().includes(term) ||
               hostel.toLowerCase().includes(term) ||
+              room.toLowerCase().includes(term) ||
               log.studentType.toLowerCase().includes(term) ||
               (log.checkOutGate && log.checkOutGate.toLowerCase().includes(term)) ||
               (log.checkInGate && log.checkInGate.toLowerCase().includes(term))
@@ -170,6 +223,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             "Contact Number": student?.contactNumber || 'N/A',
             "Student Type": log.studentType,
             "Hostel": log.studentType === 'Hosteller' ? (student?.hostel || 'N/A') : 'Day-Scholar',
+            "Room Number": log.studentType === 'Hosteller' ? (student?.roomNumber || 'N/A') : 'Day-Scholar',
             "Outing Type": log.outingType,
             "Check-Out Time": formatDateTime(log.checkOutTime),
             "Check-Out Gate": log.checkOutGate,
@@ -204,6 +258,37 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     <>
       <div className="bg-white p-8 rounded-lg shadow-lg max-w-screen-2xl mx-auto">
         <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Outing Logbook</h2>
+        
+        <div className="bg-slate-50 p-6 rounded-lg shadow-md mb-6 border border-slate-200">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Manual Gate Entry</h3>
+            {manualEntryAlert && <div className="mb-4"><Alert message={manualEntryAlert.message} type={manualEntryAlert.type} onClose={() => setManualEntryAlert(null)} /></div>}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div className="md:col-span-2">
+                    <label htmlFor="manualSearch" className="block text-gray-700 font-medium mb-1">Student Roll/Reg. Number</label>
+                    <input
+                        id="manualSearch"
+                        type="text"
+                        placeholder="Enter Roll or Registration Number"
+                        value={manualSearchTerm}
+                        onChange={(e) => setManualSearchTerm(e.target.value)}
+                        className="w-full uppercase px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    />
+                </div>
+                <div>
+                     <CustomSelect 
+                        name="manualOutingType" 
+                        label="Outing Type" 
+                        options={[OutingType.LOCAL, OutingType.NON_LOCAL]} 
+                        value={manualOutingType} 
+                        onChange={(_, value) => setManualOutingType(value as OutingType)}
+                    />
+                </div>
+                <div className="flex space-x-2">
+                    <button onClick={() => handleManualEntry('check-out')} className="w-full bg-red-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-red-600 transition">Check Out</button>
+                    <button onClick={() => handleManualEntry('check-in')} className="w-full bg-green-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-600 transition">Check In</button>
+                </div>
+            </div>
+        </div>
 
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
           <div className="flex space-x-2">
@@ -214,7 +299,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
           <div className="flex items-center space-x-4 w-full md:w-auto">
             <input
               type="text"
-              placeholder="Search Student..."
+              placeholder="Search Logs..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full md:w-80 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-100 text-gray-800 shadow-sm transition duration-150 ease-in-out focus:bg-white"
@@ -239,8 +324,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                 <SortableHeader label="Student Name" sortKey="studentName" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader label="Roll Number" sortKey="rollNumber" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader label="Year" sortKey="year" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Gender" sortKey="gender" sortConfig={sortConfig} onSort={handleSort} />
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Hostel</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Hostel/Room</th>
                 <SortableHeader label="Outing Type" sortKey="outingType" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader label="Check-Out Time" sortKey="checkOutTime" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader label="Check-Out Gate" sortKey="checkOutGate" sortConfig={sortConfig} onSort={handleSort} />
@@ -265,9 +349,8 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.rollNumber}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.year}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.gender}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {log.studentType === 'Hosteller' ? (student?.hostel || 'N/A') : 'Day-Scholar'}
+                          {log.studentType === 'Hosteller' ? `${student?.hostel || 'N/A'} / ${student?.roomNumber || 'N/A'}` : 'Day-Scholar'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.outingType}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.checkOutTime)}</td>

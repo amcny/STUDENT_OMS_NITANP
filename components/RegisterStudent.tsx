@@ -28,7 +28,7 @@ const RegisterStudent: React.FC = () => {
   const { students, setStudents } = useContext(AppContext);
   const [formData, setFormData] = useState({
     name: '', rollNumber: '', registrationNumber: '', contactNumber: '',
-    branch: '', year: '', gender: '', studentType: '', hostel: '',
+    branch: '', year: '', gender: '', studentType: '', hostel: '', roomNumber: '',
   });
   const [faceImage, setFaceImage] = useState<string | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -38,15 +38,15 @@ const RegisterStudent: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (formData.studentType === 'Day-Scholar' && formData.hostel !== '') {
-        setFormData(prev => ({ ...prev, hostel: '' }));
+    if (formData.studentType === 'Day-Scholar' && (formData.hostel !== '' || formData.roomNumber !== '')) {
+        setFormData(prev => ({ ...prev, hostel: '', roomNumber: '' }));
     }
-  }, [formData.studentType, formData.hostel]);
+  }, [formData.studentType, formData.hostel, formData.roomNumber]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
-    const uppercaseFields = ['name', 'rollNumber', 'registrationNumber'];
+    const uppercaseFields = ['name', 'rollNumber', 'registrationNumber', 'roomNumber'];
     const processedValue = uppercaseFields.includes(name) ? value.toUpperCase() : value;
 
     setFormData(prev => ({ ...prev, [name]: processedValue }));
@@ -129,7 +129,7 @@ const RegisterStudent: React.FC = () => {
         
         setFormData({
             name: '', rollNumber: '', registrationNumber: '', contactNumber: '',
-            branch: '', year: '', gender: '', studentType: '', hostel: '',
+            branch: '', year: '', gender: '', studentType: '', hostel: '', roomNumber: '',
         });
         setFaceImage(null);
 
@@ -147,8 +147,8 @@ const RegisterStudent: React.FC = () => {
 
   const baseFieldClasses = "w-full px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 text-gray-800 shadow-sm transition duration-150 ease-in-out focus:bg-white";
 
-  const renderInput = (name: keyof typeof formData, label: string, type: string = 'text') => {
-    const isUppercase = ['name', 'rollNumber', 'registrationNumber'].includes(name as string);
+  const renderInput = (name: keyof typeof formData, label: string, type: string = 'text', required: boolean = true) => {
+    const isUppercase = ['name', 'rollNumber', 'registrationNumber', 'roomNumber'].includes(name as string);
     const inputClasses = `${baseFieldClasses} ${isUppercase ? 'uppercase' : ''}`;
     return (
         <div>
@@ -159,7 +159,7 @@ const RegisterStudent: React.FC = () => {
                 name={name} 
                 value={formData[name]} 
                 onChange={handleInputChange} 
-                required 
+                required={required} 
                 className={inputClasses}
             />
         </div>
@@ -197,17 +197,20 @@ const RegisterStudent: React.FC = () => {
                     transition-[grid-template-rows] duration-500 ease-in-out
                     ${isHosteller ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}
                 `}>
-                    <div className={`min-h-0 ${isHostelDropdownOpen ? '' : 'overflow-hidden'}`}>
-                        <CustomSelect 
-                            name="hostel" 
-                            label="Hostel" 
-                            options={isGenderSelected ? currentHostelOptions : []} 
-                            value={formData.hostel} 
-                            onChange={handleSelectChange} 
-                            required={isHosteller} 
-                            disabled={!isGenderSelected} 
-                            onToggle={setIsHostelDropdownOpen}
-                        />
+                    <div className={`min-h-0 ${isHosteller ? '' : 'overflow-hidden'}`}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 md:mt-0">
+                            <CustomSelect 
+                                name="hostel" 
+                                label="Hostel" 
+                                options={isGenderSelected ? currentHostelOptions : []} 
+                                value={formData.hostel} 
+                                onChange={handleSelectChange} 
+                                required={isHosteller} 
+                                disabled={!isGenderSelected} 
+                                onToggle={setIsHostelDropdownOpen}
+                            />
+                            {renderInput('roomNumber', 'Room Number', 'text', isHosteller)}
+                        </div>
                     </div>
                 </div>
             </div>

@@ -40,6 +40,7 @@ const StudentProfileModal: React.FC<StudentProfileModalProps> = ({ isOpen, onClo
               {detailItem('Contact', student.contactNumber)}
               {detailItem('Student Type', student.studentType)}
               {student.studentType === 'Hosteller' && detailItem('Hostel', student.hostel)}
+              {student.studentType === 'Hosteller' && detailItem('Room Number', student.roomNumber)}
             </dl>
           </div>
         </div>
