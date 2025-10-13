@@ -16,7 +16,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
   const stopScanner = useCallback(() => {
     if (codeReaderRef.current) {
       codeReaderRef.current.reset();
-      // Also stop the video stream manually to be certain
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
@@ -27,7 +26,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
   }, []);
 
   useEffect(() => {
-    // A small delay to ensure the DOM is ready and modal animation is complete
     const timer = setTimeout(() => {
       if (typeof ZXing === 'undefined') {
         setError("Barcode scanning library failed to load. Please check your internet connection and refresh.");
@@ -38,25 +36,27 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
         return;
       }
 
-      const codeReader = new ZXing.BrowserMultiFormatReader();
+      // Add hints for faster processing. This tells the library to prioritize these formats.
+      const hints = new Map();
+      const formats = [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.QR_CODE];
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+      const codeReader = new ZXing.BrowserMultiFormatReader(hints);
       codeReaderRef.current = codeReader;
 
       const startScanner = async () => {
         try {
-          // Request camera access. The decodeFromVideoDevice will also do this, but doing it
-          // separately allows for better error handling.
+          // Explicitly request the rear camera
           await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
 
-          // Start decoding from the video device.
-          // 'undefined' for the device ID lets the library pick the default camera.
           codeReader.decodeFromVideoDevice(undefined, videoRef.current, (result, err) => {
             if (result) {
-              // A barcode was successfully found
-              stopScanner();
+              // Haptic feedback for a better user experience on mobile
+              navigator.vibrate?.(100);
+              // Let the parent component handle the state change.
+              // This will unmount the component, and the cleanup effect will stop the scanner.
               onScan(result.getText());
             }
             if (err) {
-                // Ignore NotFoundException as it's expected until a barcode is found
                 if (!(err instanceof ZXing.NotFoundException)) {
                     console.error("Barcode decoding error:", err);
                     setError("An error occurred during scanning.");
@@ -88,17 +88,24 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
     <div className="flex flex-col items-center">
       {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
       <div className="relative w-full bg-gray-900 rounded-lg overflow-hidden shadow-lg">
-        {/* The ZXing library will automatically attach the video stream here */}
-        <video ref={videoRef} className="w-full h-auto" />
-        <div className="absolute inset-0 flex justify-center items-center pointer-events-none">
-          <div 
-            className="w-[80%] h-32 border-4 border-red-500 border-dashed rounded-lg opacity-75" 
-            style={{boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)'}}
-          ></div>
+        <video 
+            ref={videoRef} 
+            className="w-full h-auto" 
+            style={{ filter: 'contrast(1.3) brightness(1.1)' }} // Enhance video feed for better scanning
+            playsInline
+        />
+        <div className="scanner-overlay absolute inset-0 flex justify-center items-center pointer-events-none">
+            <div className="scanner-box relative w-[80%] h-[40%]">
+                <div className="corner top-left"></div>
+                <div className="corner top-right"></div>
+                <div className="corner bottom-left"></div>
+                <div className="corner bottom-right"></div>
+                <div className="scanner-laser"></div>
+            </div>
         </div>
         {!error && (
             <p className="absolute bottom-4 left-0 right-0 text-white text-center text-lg font-semibold bg-black bg-opacity-50 p-2">
-                Align barcode within the rectangle
+                Align barcode within the frame
             </p>
         )}
       </div>
