@@ -144,11 +144,22 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         setManualEntryAlert({ message: `${student.name} checked out successfully.`, type: 'success'});
 
     } else { // Check-in
-        const activeLogIndex = outingLogs.findIndex(log => log.studentId === student.id && log.checkInTime === null);
+        const activeLogIndex = outingLogs.findIndex(log => 
+            log.studentId === student.id && 
+            log.checkInTime === null &&
+            log.outingType === manualOutingType
+        );
+
         if (activeLogIndex === -1) {
-            setManualEntryAlert({ message: `No active outing found for ${student.name}.`, type: 'error' });
+            const otherActiveOuting = outingLogs.find(log => log.studentId === student.id && log.checkInTime === null);
+            if (otherActiveOuting) {
+                 setManualEntryAlert({ message: `${student.name} has an active '${otherActiveOuting.outingType}' outing. Please select the correct outing type to check them in.`, type: 'error' });
+            } else {
+                 setManualEntryAlert({ message: `No active '${manualOutingType}' outing found for ${student.name}.`, type: 'error' });
+            }
             return;
         }
+
         const updatedLogs = [...outingLogs];
         updatedLogs[activeLogIndex] = { ...updatedLogs[activeLogIndex], checkInTime: new Date().toISOString(), checkInGate: gate, remarks: updatedLogs[activeLogIndex].remarks ? `${updatedLogs[activeLogIndex].remarks}; Manual Check-In` : 'Manual Check-In by Admin' };
         setOutingLogs(updatedLogs);
@@ -271,7 +282,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                         placeholder="Enter Roll or Registration Number"
                         value={manualSearchTerm}
                         onChange={(e) => setManualSearchTerm(e.target.value)}
-                        className="w-full uppercase px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        className="w-full uppercase px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-800"
                     />
                 </div>
                 <div>
