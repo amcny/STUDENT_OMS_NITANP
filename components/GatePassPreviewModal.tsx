@@ -101,7 +101,7 @@ const GatePassPreviewModal: React.FC<GatePassPreviewModalProps> = ({ isOpen, onC
           <style>
             @media print {
               body {
-                margin: 0;
+                margin: 1in;
                 -webkit-print-color-adjust: exact;
                 color-adjust: exact;
               }
@@ -117,13 +117,15 @@ const GatePassPreviewModal: React.FC<GatePassPreviewModalProps> = ({ isOpen, onC
     `);
 
     printWindow.document.close();
-    printWindow.onload = () => {
-      setTimeout(() => {
+
+    // The Tailwind JIT CDN needs time to scan the DOM, generate CSS, and load any custom fonts.
+    // Using a timeout is a pragmatic and reliable way to ensure this entire process completes
+    // before the print dialog is opened, preventing font/style rendering issues.
+    setTimeout(() => {
         printWindow.focus();
         printWindow.print();
         printWindow.close();
-      }, 500); // A short delay ensures all styles from the CDN are applied before printing.
-    };
+    }, 1000); // 1-second delay for robustness
   };
 
   return (
