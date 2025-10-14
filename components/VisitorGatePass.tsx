@@ -62,7 +62,9 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
     
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const uppercaseFields = ['name', 'relation', 'address', 'vehicleNumber', 'whomToMeet', 'placeToVisit', 'purpose'];
+        const processedValue = uppercaseFields.includes(name) ? value.toUpperCase() : value;
+        setFormData(prev => ({ ...prev, [name]: processedValue }));
     };
 
     const generatePassNumber = () => {
@@ -165,20 +167,20 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                     <section>
                         <h3 className="text-xl font-bold text-slate-700 mb-4 border-l-4 border-blue-500 pl-3">Visitor's Details</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-lg border">
-                            <div><label className="block text-gray-700 font-medium mb-1">Full Name</label><input type="text" name="name" value={formData.name} onChange={handleInputChange} required className={baseFieldClasses} /></div>
-                            <div><label className="block text-gray-700 font-medium mb-1">Relation</label><input type="text" name="relation" value={formData.relation} onChange={handleInputChange} required className={baseFieldClasses} placeholder="e.g., Parent, Sibling, Friend"/></div>
+                            <div><label className="block text-gray-700 font-medium mb-1">Full Name</label><input type="text" name="name" value={formData.name} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
+                            <div><label className="block text-gray-700 font-medium mb-1">Relation</label><input type="text" name="relation" value={formData.relation} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} placeholder="e.g., PARENT, SIBLING, FRIEND"/></div>
                             <div><label className="block text-gray-700 font-medium mb-1">Mobile Number</label><input type="tel" name="mobileNumber" value={formData.mobileNumber} onChange={handleInputChange} required className={baseFieldClasses} /></div>
-                            <div className="md:col-span-2"><label className="block text-gray-700 font-medium mb-1">Address</label><input type="text" name="address" value={formData.address} onChange={handleInputChange} required className={baseFieldClasses} /></div>
+                            <div className="md:col-span-2"><label className="block text-gray-700 font-medium mb-1">Address</label><input type="text" name="address" value={formData.address} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
                             <div><label className="block text-gray-700 font-medium mb-1">Vehicle Number (Optional)</label><input type="text" name="vehicleNumber" value={formData.vehicleNumber} onChange={handleInputChange} className={`${baseFieldClasses} uppercase`} /></div>
                         </div>
                     </section>
                     <section>
                         <h3 className="text-xl font-bold text-slate-700 mb-4 border-l-4 border-blue-500 pl-3">Purpose of Visit</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-lg border">
-                            <div><label className="block text-gray-700 font-medium mb-1">Whom to Meet</label><input type="text" name="whomToMeet" value={formData.whomToMeet} onChange={handleInputChange} required className={baseFieldClasses} /></div>
-                            <div><label className="block text-gray-700 font-medium mb-1">Place to Visit</label><input type="text" name="placeToVisit" value={formData.placeToVisit} onChange={handleInputChange} required className={baseFieldClasses} /></div>
+                            <div><label className="block text-gray-700 font-medium mb-1">Whom to Meet</label><input type="text" name="whomToMeet" value={formData.whomToMeet} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
+                            <div><label className="block text-gray-700 font-medium mb-1">Place to Visit</label><input type="text" name="placeToVisit" value={formData.placeToVisit} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
                             <div><label className="block text-gray-700 font-medium mb-1">Person's Mobile (Optional)</label><input type="tel" name="personToMeetMobile" value={formData.personToMeetMobile} onChange={handleInputChange} className={baseFieldClasses} /></div>
-                            <div className="md:col-span-2"><label className="block text-gray-700 font-medium mb-1">Purpose</label><textarea name="purpose" value={formData.purpose} onChange={handleInputChange} required rows={3} className={baseFieldClasses}></textarea></div>
+                            <div className="md:col-span-2"><label className="block text-gray-700 font-medium mb-1">Purpose</label><textarea name="purpose" value={formData.purpose} onChange={handleInputChange} required rows={3} className={`${baseFieldClasses} uppercase`}></textarea></div>
                         </div>
                     </section>
                     <div className="mt-8 border-t pt-6"><button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 transition duration-300 text-lg flex justify-center items-center disabled:bg-blue-400 disabled:cursor-wait">{isSubmitting ? 'Submitting...' : 'Generate & Preview Pass'}</button></div>

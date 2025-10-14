@@ -17,58 +17,75 @@ const GatePassPreviewModal: React.FC<GatePassPreviewModalProps> = ({ isOpen, onC
 
   if (!isOpen || !passData) return null;
 
-  const handlePrint = () => {
-    if (!passRef.current) return;
+  const handlePrint = async () => {
+    const elementToCapture = passRef.current;
+    if (!elementToCapture) return;
 
-    html2canvas(passRef.current, {
-        scale: 3, // Higher scale for better resolution
-        useCORS: true,
-        backgroundColor: '#ffffff',
-    }).then((canvas) => {
-        const imgData = canvas.toDataURL('image/png');
-        // Create a portrait A4 PDF
-        const pdf = new jspdf.jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a4',
-        });
-
-        const a4Width = 210;
-        // Half of A4 height for an A5 landscape area
-        const a4HalfHeight = 148.5;
-
-        // Margins for the content within the A5 area
-        const margin = 10;
-        const contentWidth = a4Width - (margin * 2);
-        const contentHeight = a4HalfHeight - (margin * 2);
-
-        const canvasAspectRatio = canvas.width / canvas.height;
-        let imgWidth = contentWidth;
-        let imgHeight = imgWidth / canvasAspectRatio;
-
-        // If the calculated height exceeds the available content area, resize based on height instead
-        if (imgHeight > contentHeight) {
-            imgHeight = contentHeight;
-            imgWidth = imgHeight * canvasAspectRatio;
-        }
-
-        // Center the image within the top A5 portion of the A4 page
-        const x = (a4Width - imgWidth) / 2;
-        const y = margin; // Place it at the top margin
-
-        pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight);
+    try {
+      // Wait for all fonts in the document to be loaded and ready.
+      // This is the most reliable way to prevent layout shifts from font loading.
+      await document.fonts.ready;
       
-        const blob = pdf.output('blob');
-        const blobUrl = URL.createObjectURL(blob);
-        const printWindow = window.open(blobUrl, '_blank');
-        if (printWindow) {
-            printWindow.onload = () => {
-                printWindow.print();
-            }
-        } else {
-            alert("Please allow popups for this website to print the pass.");
-        }
-    });
+      // A minimal extra delay can help ensure the browser has completed its final paint cycle.
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const canvas = await html2canvas(elementToCapture, {
+          scale: 3, // Higher scale for better resolution
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          // Use the element's exact dimensions for a more accurate capture
+          width: elementToCapture.offsetWidth,
+          height: elementToCapture.offsetHeight,
+          removeContainer: true,
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      // Create a portrait A4 PDF
+      const pdf = new jspdf.jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4',
+      });
+
+      const a4Width = 210;
+      // Half of A4 height for an A5 landscape area
+      const a4HalfHeight = 148.5;
+
+      // Margins for the content within the A5 area
+      const margin = 10;
+      const contentWidth = a4Width - (margin * 2);
+      const contentHeight = a4HalfHeight - (margin * 2);
+
+      const canvasAspectRatio = canvas.width / canvas.height;
+      let imgWidth = contentWidth;
+      let imgHeight = imgWidth / canvasAspectRatio;
+
+      // If the calculated height exceeds the available content area, resize based on height instead
+      if (imgHeight > contentHeight) {
+          imgHeight = contentHeight;
+          imgWidth = imgHeight * canvasAspectRatio;
+      }
+
+      // Center the image within the top A5 portion of the A4 page
+      const x = (a4Width - imgWidth) / 2;
+      const y = margin; // Place it at the top margin
+
+      pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight);
+    
+      const blob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(blob);
+      const printWindow = window.open(blobUrl, '_blank');
+      if (printWindow) {
+          printWindow.onload = () => {
+              printWindow.print();
+          }
+      } else {
+          alert("Please allow popups for this website to print the pass.");
+      }
+    } catch (error) {
+        console.error("Printing failed:", error);
+        alert("Sorry, an error occurred while trying to print the pass.");
+    }
   };
   
   const DetailItem: React.FC<{ label: string; value: string | undefined | null; className?: string }> = ({ label, value, className = '' }) => (
@@ -81,8 +98,10 @@ const GatePassPreviewModal: React.FC<GatePassPreviewModalProps> = ({ isOpen, onC
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Visitor Pass Preview" size="4xl">
       <div className="space-y-4">
-        <div ref={passRef} className="bg-white p-4 border-2 border-black aspect-[1.414/1]" style={{ width: '100%' }}>
-           <div className="flex flex-col h-full">
+        {/* The layout is now a direct, robust flex column to prevent content shifts */}
+        <div ref={passRef} className="bg-white p-4 border-2 border-black aspect-[1.414/1] flex flex-col" style={{ width: '100%' }}>
+            {/* This div will take up all available vertical space, pushing the footer down */}
+            <div className="flex-grow">
                 <header className="flex items-center gap-4 border-b-2 border-black pb-2 text-gray-800">
                     <svg className="w-16 h-16 text-gray-700 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1"><path d="M12 14l9-5-9-5-9 5 9 5z"></path><path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-5.998 12.078 12.078 0 01.665-6.479L12 14z"></path><path d="M12 14l9-5-9-5-9 5 9 5z" transform="translate(0, 6)"></path></svg>
                     <div className="text-center flex-grow">
@@ -94,7 +113,7 @@ const GatePassPreviewModal: React.FC<GatePassPreviewModalProps> = ({ isOpen, onC
 
                 <h2 className="text-center text-xl font-bold my-2 p-1 bg-gray-800 text-white tracking-widest">VISITOR GATE PASS</h2>
                 
-                <div className="flex-grow grid grid-cols-12 gap-x-4">
+                <div className="grid grid-cols-12 gap-x-4">
                     <div className="col-span-8 space-y-2">
                         <div className="grid grid-cols-2 gap-x-4 border-b pb-2">
                             <DetailItem label="Visitor Name" value={passData.name} />
@@ -115,24 +134,25 @@ const GatePassPreviewModal: React.FC<GatePassPreviewModalProps> = ({ isOpen, onC
                        <DetailItem label="Gate" value={passData.gateName} />
                     </div>
                 </div>
+            </div>
 
-                <footer className="mt-auto border-t-2 border-black pt-2">
-                    <div className="grid grid-cols-2 gap-x-4">
-                        <DetailItem label="In-Time" value={new Date(passData.inTime).toLocaleString()} />
-                        <DetailItem label="Out-Time" value={passData.outTime ? new Date(passData.outTime).toLocaleString() : ''} />
+            {/* This footer will not shrink and is guaranteed to stay at the bottom */}
+            <footer className="border-t-2 border-black pt-2 flex-shrink-0">
+                <div className="grid grid-cols-2 gap-x-4">
+                    <DetailItem label="In-Time" value={new Date(passData.inTime).toLocaleString()} />
+                    <DetailItem label="Out-Time" value={passData.outTime ? new Date(passData.outTime).toLocaleString() : ''} />
+                </div>
+                <div className="flex justify-between items-end mt-1">
+                    <div>
+                         <p className="text-[10px] font-bold text-gray-600">Note: This pass is valid for single entry on the day of issue only.</p>
+                         <p className="text-[10px] text-gray-500">Issued by: Security Office</p>
                     </div>
-                    <div className="flex justify-between items-end mt-1">
-                        <div>
-                             <p className="text-[10px] font-bold text-gray-600">Note: This pass is valid for single entry on the day of issue only.</p>
-                             <p className="text-[10px] text-gray-500">Issued by: Security Office</p>
-                        </div>
-                        <div className="text-center">
-                            <div className="h-8"></div>
-                            <p className="text-xs border-t border-gray-500 px-8 pt-1">Authorised Signatory</p>
-                        </div>
+                    <div className="text-center">
+                        <div className="h-8"></div>
+                        <p className="text-xs border-t border-gray-500 px-8 pt-1">Authorised Signatory</p>
                     </div>
-                </footer>
-           </div>
+                </div>
+            </footer>
         </div>
         
         <div className="flex justify-end mt-4">
