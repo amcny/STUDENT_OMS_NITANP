@@ -16,7 +16,8 @@
   "imports": {
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0"
   }
 }
 </script>
@@ -49,10 +50,20 @@
     0% { top: 0%; }
     100% { top: 100%; }
   }
+
+  @media print {
+    body > #root {
+      display: none;
+    }
+    #print-container {
+      display: block;
+    }
+  }
 </style>
 </head>
   <body class="bg-slate-100">
     <div id="root"></div>
+    <div id="print-container"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>
