@@ -40,6 +40,7 @@ const Header: React.FC<HeaderProps> = ({ currentView, onViewChange, gate, onLogo
             <NavButton label="Kiosk" view="kiosk" currentView={currentView} onViewChange={onViewChange} />
             <NavButton label="Register Student" view="register" currentView={currentView} onViewChange={onViewChange} />
             <NavButton label="Logbook" view="logbook" currentView={currentView} onViewChange={onViewChange} />
+            <NavButton label="Visitor Pass" view="visitorPass" currentView={currentView} onViewChange={onViewChange} />
         </div>
         <div className="flex items-center space-x-4">
             <span className="text-sm text-gray-300 hidden sm:block">

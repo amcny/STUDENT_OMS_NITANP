@@ -35,4 +35,23 @@ export interface OutingRecord {
   checkInGate: string | null;
 }
 
-export type View = 'dashboard' | 'kiosk' | 'register' | 'logbook' | 'allStudents';
+export interface VisitorPassRecord {
+  id: string;
+  passNumber: string;
+  date: string; // ISO string for the date part
+  inTime: string; // ISO string
+  outTime: string | null; // ISO string or null
+  name: string;
+  relation: string;
+  mobileNumber: string;
+  address: string;
+  vehicleNumber?: string; // Optional
+  whomToMeet: string;
+  placeToVisit: string;
+  personToMeetMobile?: string; // Optional
+  purpose: string;
+  gateName: string;
+}
+
+
+export type View = 'dashboard' | 'kiosk' | 'register' | 'logbook' | 'allStudents' | 'visitorPass';

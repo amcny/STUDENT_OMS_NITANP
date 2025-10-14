@@ -5,17 +5,20 @@ import OutingKiosk from './components/OutingKiosk';
 import Logbook from './components/Logbook';
 import Dashboard from './components/Dashboard';
 import AllStudents from './components/AllStudents';
+import VisitorGatePass from './components/VisitorGatePass';
 import Footer from './components/Footer';
 import Login from './components/Login';
-import { Student, OutingRecord, View } from './types';
+import { Student, OutingRecord, View, VisitorPassRecord } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
-import { STUDENTS_STORAGE_KEY, OUTING_LOGS_STORAGE_key } from './constants';
+import { STUDENTS_STORAGE_KEY, OUTING_LOGS_STORAGE_key, VISITOR_LOGS_STORAGE_KEY } from './constants';
 
 interface AppContextType {
   students: Student[];
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
   outingLogs: OutingRecord[];
   setOutingLogs: React.Dispatch<React.SetStateAction<OutingRecord[]>>;
+  visitorLogs: VisitorPassRecord[];
+  setVisitorLogs: React.Dispatch<React.SetStateAction<VisitorPassRecord[]>>;
 }
 
 export const AppContext = createContext<AppContextType>({
@@ -23,12 +26,15 @@ export const AppContext = createContext<AppContextType>({
   setStudents: () => {},
   outingLogs: [],
   setOutingLogs: () => {},
+  visitorLogs: [],
+  setVisitorLogs: () => {},
 });
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [students, setStudents] = useLocalStorage<Student[]>(STUDENTS_STORAGE_KEY, []);
   const [outingLogs, setOutingLogs] = useLocalStorage<OutingRecord[]>(OUTING_LOGS_STORAGE_key, []);
+  const [visitorLogs, setVisitorLogs] = useLocalStorage<VisitorPassRecord[]>(VISITOR_LOGS_STORAGE_KEY, []);
   const [gate, setGate] = useState<string | null>(null);
 
   const handleLogin = (gateName: string) => {
@@ -51,6 +57,8 @@ const App: React.FC = () => {
         return <Logbook gate={gate!} />;
       case 'allStudents':
         return <AllStudents onViewChange={setCurrentView} />;
+      case 'visitorPass':
+        return <VisitorGatePass gate={gate!} />;
       default:
         return <Dashboard onViewChange={setCurrentView} />;
     }
@@ -61,7 +69,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <AppContext.Provider value={{ students, setStudents, outingLogs, setOutingLogs }}>
+    <AppContext.Provider value={{ students, setStudents, outingLogs, setOutingLogs, visitorLogs, setVisitorLogs }}>
       <div className="min-h-screen bg-slate-100 flex flex-col">
         <Header currentView={currentView} onViewChange={setCurrentView} gate={gate} onLogout={handleLogout} />
         <main className="container mx-auto p-6 flex-grow">
