@@ -36,7 +36,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
        <header className="bg-gradient-to-r from-slate-800 to-slate-900 text-white p-4 shadow-lg w-full">
             <div className="container mx-auto flex items-center gap-4">
                 <img 
-                    src="https://upload.wikimedia.org/wikipedia/commons/b/bd/Nitanp_logo.png" 
+                    src="https://mscnitanp.pages.dev/nitanp_logo.png" 
                     alt="NIT Andhra Pradesh Logo" 
                     className="h-16 w-16 flex-shrink-0"
                 />
