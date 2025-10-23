@@ -5,6 +5,9 @@ import Alert from './Alert';
 import ConfirmationModal from './ConfirmationModal';
 import GatePassPreviewModal from './GatePassPreviewModal';
 
+// Allow TypeScript to recognize the XLSX global variable from the script tag
+declare var XLSX: any;
+
 const INITIAL_FORM_DATA = {
   name: '',
   relation: '',
@@ -17,7 +20,7 @@ const INITIAL_FORM_DATA = {
   purpose: '',
 };
 
-type SortKey = 'name' | 'inTime' | 'outTime' | 'whomToMeet' | 'gateName';
+type SortKey = 'name' | 'inTime' | 'outTime' | 'whomToMeet' | 'gateName' | 'outGateName';
 type SortDirection = 'ascending' | 'descending';
 
 const SortableHeader: React.FC<{
@@ -47,7 +50,7 @@ interface VisitorGatePassProps {
 const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
     const { visitorLogs, setVisitorLogs } = useContext(AppContext);
     const [formData, setFormData] = useState(INITIAL_FORM_DATA);
-    const [alert, setAlert] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     // Logbook states
@@ -78,7 +81,7 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
-        setAlert(null);
+        setNotification(null);
 
         try {
             const now = new Date();
@@ -89,16 +92,17 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                 inTime: now.toISOString(),
                 outTime: null,
                 gateName: gate,
+                outGateName: null,
                 ...formData,
             };
 
             setVisitorLogs(prev => [newPass, ...prev]);
-            setAlert({ message: 'Visitor pass generated successfully!', type: 'success' });
+            setNotification({ message: 'Visitor pass generated successfully!', type: 'success' });
             setFormData(INITIAL_FORM_DATA);
             setPassToPreview(newPass); // Open preview modal
         } catch (error) {
             console.error("Error generating pass:", error);
-            setAlert({ message: 'Failed to generate pass. Please try again.', type: 'error' });
+            setNotification({ message: 'Failed to generate pass. Please try again.', type: 'error' });
         } finally {
             setIsSubmitting(false);
         }
@@ -119,7 +123,7 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
 
     const handleConfirmMarkOut = () => {
         if (!logToMarkOut) return;
-        setVisitorLogs(prev => prev.map(log => log.id === logToMarkOut.id ? { ...log, outTime: new Date().toISOString() } : log));
+        setVisitorLogs(prev => prev.map(log => log.id === logToMarkOut.id ? { ...log, outTime: new Date().toISOString(), outGateName: gate } : log));
         setLogToMarkOut(null);
     };
 
@@ -142,18 +146,76 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
           })
           .sort((a, b) => {
             const key = sortConfig.key;
-            let valA: string | number | null = a[key];
-            let valB: string | number | null = b[key];
+            let valA = a[key as keyof VisitorPassRecord];
+            let valB = b[key as keyof VisitorPassRecord];
+            
+            // Handle nulls for sortable fields that can be null
+            if (key === 'outTime' || key === 'outGateName') {
+                const directionMultiplier = sortConfig.direction === 'ascending' ? 1 : -1;
+                if (valA === null && valB !== null) return 1 * directionMultiplier;
+                if (valA !== null && valB === null) return -1 * directionMultiplier;
+                if (valA === null && valB === null) return 0;
+            }
+
             if (key === 'inTime' || key === 'outTime') {
-                if (valA === null) return 1; if (valB === null) return -1;
                 valA = new Date(valA as string).getTime();
                 valB = new Date(valB as string).getTime();
             }
+
             if (valA! < valB!) return sortConfig.direction === 'ascending' ? -1 : 1;
             if (valA! > valB!) return sortConfig.direction === 'ascending' ? 1 : -1;
             return 0;
           });
     }, [visitorLogs, filter, searchTerm, sortConfig]);
+    
+    const handleExportToExcel = () => {
+        if (typeof XLSX === 'undefined') {
+            console.error("XLSX library is not loaded.");
+            window.alert("Could not export to Excel. The required library is missing.");
+            return;
+        }
+
+        const dataToExport = sortedAndFilteredLogs.map(log => {
+            return {
+                "Pass Number": log.passNumber,
+                "Date": new Date(log.date).toLocaleDateString(),
+                "Visitor Name": log.name,
+                "Relation": log.relation,
+                "Mobile Number": log.mobileNumber,
+                "Address": log.address,
+                "Vehicle Number": log.vehicleNumber || 'N/A',
+                "Whom to Meet": log.whomToMeet,
+                "Person's Mobile": log.personToMeetMobile || 'N/A',
+                "Place to Visit": log.placeToVisit,
+                "Purpose of Visit": log.purpose,
+                "In-Time": formatDateTime(log.inTime),
+                "Out-Time": formatDateTime(log.outTime),
+                "In-Gate": log.gateName,
+                "Out-Gate": log.outGateName || 'N/A',
+                "Status": log.outTime ? 'Departed' : 'On Campus',
+            };
+        });
+
+        if (dataToExport.length === 0) {
+            window.alert("No data to export.");
+            return;
+        }
+
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Visitor Logs");
+
+        const colWidths = Object.keys(dataToExport[0]).map(key => ({
+            wch: Math.max(
+                key.length,
+                ...dataToExport.map(row => (row[key as keyof typeof row] || '').toString().length)
+            ) + 2
+        }));
+        worksheet["!cols"] = colWidths;
+
+        XLSX.writeFile(workbook, "Visitor_Logbook.xlsx");
+    };
+
 
     const baseFieldClasses = "w-full px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 text-gray-800 shadow-sm transition duration-150 ease-in-out focus:bg-white";
 
@@ -161,7 +223,7 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
         <div className="space-y-8">
             <div className="bg-white p-8 rounded-lg shadow-xl max-w-5xl mx-auto">
                 <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Create Visitor Gate Pass</h2>
-                {alert && <div className="mb-6"><Alert message={alert.message} type={alert.type} onClose={() => setAlert(null)} /></div>}
+                {notification && <div className="mb-6"><Alert message={notification.message} type={notification.type} onClose={() => setNotification(null)} /></div>}
                 
                 <form onSubmit={handleSubmit} className="space-y-8">
                     <section>
@@ -195,7 +257,19 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                     <button onClick={() => setFilter('inside')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'inside' ? 'bg-yellow-500 text-white' : 'bg-gray-200 text-gray-700'}`}>On Campus</button>
                     <button onClick={() => setFilter('departed')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'departed' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Departed</button>
                   </div>
-                  <input type="text" placeholder="Search Logs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-80 px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 bg-gray-100" />
+                  <div className="flex items-center space-x-4 w-full md:w-auto">
+                    <input type="text" placeholder="Search Logs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-80 px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 bg-gray-100" />
+                    <button
+                        onClick={handleExportToExcel}
+                        className="flex-shrink-0 flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors"
+                        title="Export current view to Excel"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 9.293a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                        <span>Export</span>
+                    </button>
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full bg-white border">
@@ -203,9 +277,11 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                             <tr>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Pass No.</th>
                                 <SortableHeader label="Visitor Name" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />
-                                <SortableHeader label="In Time" sortKey="inTime" sortConfig={sortConfig} onSort={handleSort} />
-                                <SortableHeader label="Out Time" sortKey="outTime" sortConfig={sortConfig} onSort={handleSort} />
                                 <SortableHeader label="Whom to Meet" sortKey="whomToMeet" sortConfig={sortConfig} onSort={handleSort} />
+                                <SortableHeader label="In Time" sortKey="inTime" sortConfig={sortConfig} onSort={handleSort} />
+                                <SortableHeader label="In Gate" sortKey="gateName" sortConfig={sortConfig} onSort={handleSort} />
+                                <SortableHeader label="Out Time" sortKey="outTime" sortConfig={sortConfig} onSort={handleSort} />
+                                <SortableHeader label="Out Gate" sortKey="outGateName" sortConfig={sortConfig} onSort={handleSort} />
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Status</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Actions</th>
                             </tr>
@@ -215,9 +291,11 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                                 <tr key={log.id} className="hover:bg-gray-50">
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{log.passNumber}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.name}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.inTime)}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.outTime)}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{log.whomToMeet}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.inTime)}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{log.gateName}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.outTime)}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{log.outGateName || 'N/A'}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm">
                                         {log.outTime ? <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Departed</span> : <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">On Campus</span>}
                                     </td>

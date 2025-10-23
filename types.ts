@@ -51,6 +51,7 @@ export interface VisitorPassRecord {
   personToMeetMobile?: string; // Optional
   purpose: string;
   gateName: string;
+  outGateName: string | null;
 }
 
 
