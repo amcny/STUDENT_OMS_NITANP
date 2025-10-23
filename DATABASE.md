@@ -1,39 +1,45 @@
 # PostgreSQL & pgvector Setup Guide for Beginners
 
-This guide provides a direct, step-by-step plan to set up the database for this project.
+This guide provides a direct, step-by-step plan to set up and connect a real database for this project, replacing the current local storage system.
+
+---
 
 ### Step 1: Install PostgreSQL
 
-The easiest way to get started is with a graphical installer which includes a user-friendly management tool called **pgAdmin**.
+The easiest way is using a graphical installer which includes **pgAdmin**, a user-friendly management tool.
 
 1.  **Download:** Go to the [PostgreSQL download page](https://www.postgresql.org/download/) and select your operating system (Windows, macOS, Linux).
-2.  **Install:** Run the installer. **Remember the password you set for the `postgres` user** during installation. You will need it. Keep all other settings as default.
-3.  **pgAdmin:** The installer will also install **pgAdmin**, which is a GUI application you will use to manage the database.
+2.  **Install:** Run the installer. **Remember the password you set for the `postgres` user**—you will need it. Keep all other settings as default.
+3.  **pgAdmin:** The installer also adds the **pgAdmin** application, which you'll use to see and manage your data.
+
+---
 
 ### Step 2: Create Your Database
 
-1.  **Open pgAdmin:** Find and open the pgAdmin application.
-2.  **Connect to Server:** It will ask for the password you created during installation to connect to your local PostgreSQL server.
+1.  **Open pgAdmin:** Find and open the pgAdmin app.
+2.  **Connect:** It will ask for the password you created during installation.
 3.  **Create Database:**
     *   In the left-hand browser panel, right-click on **Databases**.
     *   Select **Create** -> **Database...**.
     *   Enter `outing_management` as the **Database name** and click **Save**.
 
-### Step 3: Enable Vector Extension & Create Tables
+---
+
+### Step 3: Create Your Tables
+
+This step sets up the structure inside your database to hold students, outing logs, and visitor passes.
 
 1.  **Open Query Tool:**
     *   In the left panel, find your new `outing_management` database.
-    *   Right-click on it and select **Query Tool**. This opens a text editor where you can run commands.
-2.  **Run Commands:** Copy the entire SQL script below, paste it into the Query Tool, and click the "Execute/Run" button (usually a lightning bolt icon).
+    *   Right-click on it and select **Query Tool**.
+2.  **Run SQL Commands:** Copy the entire block of code below, paste it into the Query Tool, and click the **"Execute/Run" button** (a lightning bolt icon).
 
 ```sql
--- Step 3.1: Enable the pgvector extension
--- This adds the special 'vector' data type for facial recognition.
+-- Enable the pgvector extension for facial recognition
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Step 3.2: Create the 'students' table
--- This stores student profiles. 'face_features vector(128)' is the crucial part
--- for storing the 128-dimensional facial data.
+-- Create the 'students' table to store profiles
+-- 'face_features vector(128)' is the special field for facial data.
 CREATE TABLE students (
     id UUID PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -50,9 +56,7 @@ CREATE TABLE students (
     face_features vector(128) NOT NULL -- Stores the 128-point face vector
 );
 
--- Step 3.3: Create the 'outing_logs' table
--- This table tracks every time a student checks in or out.
--- 'student_id' links back to the 'students' table.
+-- Create the 'outing_logs' table to track student movements
 CREATE TABLE outing_logs (
     id UUID PRIMARY KEY,
     student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
@@ -69,8 +73,7 @@ CREATE TABLE outing_logs (
     check_in_gate VARCHAR(100)
 );
 
--- Step 3.4: Create the 'visitor_logs' table
--- This stores records for all non-student visitors.
+-- Create the 'visitor_logs' table for visitor gate passes
 CREATE TABLE visitor_logs (
     id UUID PRIMARY KEY,
     pass_number VARCHAR(100) UNIQUE NOT NULL,
@@ -88,26 +91,43 @@ CREATE TABLE visitor_logs (
     purpose TEXT NOT NULL,
     gate_name VARCHAR(100) NOT NULL
 );
-
 ```
 
 **Your database is now fully set up and ready.**
 
-### Step 4: How Your Backend Will Use It (The Concept)
+---
 
-You will use a Node.js library like `pg` or `node-postgres` to connect to this database.
+### Step 4: The Full-Stack Plan (From Local Storage to Backend)
 
-1.  **Connection:** Your backend code will use a "connection string" to log in to the database. It looks like this:
-    `postgresql://postgres:YOUR_PASSWORD@localhost:5432/outing_management`
+Here is the high-level plan to connect your app to the new database.
 
-2.  **Registering a Student (INSERT):** When a new student is registered, your backend will run a SQL `INSERT` command to save their data, including the facial feature vector.
+#### **A. Create a Backend Server**
 
-    *Example Concept:*
-    `INSERT INTO students (id, name, ..., face_features) VALUES ($1, $2, ..., '[1.23, -0.45, ...]')`
+Your browser app (frontend) cannot talk directly to a database for security reasons. You need a middleman: a **backend server**.
 
-3.  **Facial Recognition (SELECT):** This is the most important part. To find a student, your backend will search for the vector that is most similar to the one from the camera. The `<=>` operator from `pgvector` does this very fast.
+*   **What to do:** Create a simple **Node.js** server using the **Express** framework. Since Node.js uses JavaScript, you won't need to learn a completely new language. This server will be a separate project/folder.
 
-    *Example Concept (Finding the closest match):*
-    `SELECT *, face_features <=> '[0.98, -0.12, ...]' AS distance FROM students ORDER BY distance LIMIT 1;`
+#### **B. Connect the Backend to PostgreSQL**
 
-This query calculates the "distance" between the scanned face and every face in the database and gives you the closest one.
+*   **What to do:** In your Node.js project, install a package called `node-postgres` (or `pg`). This library allows your Node.js code to connect to and run commands on your PostgreSQL database. You will use a "connection string" like `postgresql://postgres:YOUR_PASSWORD@localhost:5432/outing_management` to log in.
+
+#### **C. Create API Endpoints**
+
+Think of endpoints as specific URLs on your backend server that your frontend can call to request or send data.
+
+*   **What to do:** In your Node.js/Express server, create these endpoints:
+    *   `GET /api/students`: Fetch all students from the database.
+    *   `POST /api/students`: Receive new student data from the registration form, generate the face vector, and save it all to the `students` table in the database.
+    *   `GET /api/outing-logs`: Fetch all outing logs.
+    *   `POST /api/kiosk/scan`: This is the key one. The frontend sends the captured face image. The backend extracts the features, runs the `pgvector` similarity search query against the database (`SELECT ... ORDER BY face_features <=> $1 LIMIT 1`), and returns the matched student.
+    *   Create similar endpoints for updating logs (check-in/out) and managing visitor passes.
+
+#### **D. Modify the Frontend App**
+
+Finally, you will update your React components to talk to your new backend instead of local storage.
+
+*   **What to do:**
+    1.  Remove the `useLocalStorage` hook.
+    2.  In `App.tsx`, instead of initializing state from local storage, use a `useEffect` hook with `fetch` to call `GET /api/students` (and logs) from your backend to load initial data.
+    3.  In `RegisterStudent.tsx`, the `handleSubmit` function will no longer add a student to local state directly. Instead, it will use `fetch` to `POST` the form data and face image to your `/api/students` endpoint on the backend.
+    4.  Repeat this pattern for all other components: every place that reads from or writes to local storage now needs to be changed to a `fetch` call to the appropriate backend API endpoint.
