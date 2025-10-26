@@ -221,35 +221,35 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
 
     return (
         <div className="space-y-8">
-            <div className="bg-white p-8 rounded-lg shadow-xl max-w-5xl mx-auto">
+            <div className="bg-white p-8 rounded-lg shadow-xl max-w-screen-2xl mx-auto">
                 <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Create Visitor Gate Pass</h2>
                 {notification && <div className="mb-6"><Alert message={notification.message} type={notification.type} onClose={() => setNotification(null)} /></div>}
                 
                 <form onSubmit={handleSubmit} className="space-y-8">
                     <section>
                         <h3 className="text-xl font-bold text-slate-700 mb-4 border-l-4 border-blue-500 pl-3">Visitor's Details</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-lg border">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4 bg-slate-50 rounded-lg border">
                             <div><label className="block text-gray-700 font-medium mb-1">Full Name</label><input type="text" name="name" value={formData.name} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
                             <div><label className="block text-gray-700 font-medium mb-1">Relation</label><input type="text" name="relation" value={formData.relation} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} placeholder="e.g., PARENT, SIBLING, FRIEND"/></div>
                             <div><label className="block text-gray-700 font-medium mb-1">Mobile Number</label><input type="tel" name="mobileNumber" value={formData.mobileNumber} onChange={handleInputChange} required className={baseFieldClasses} /></div>
-                            <div className="md:col-span-2"><label className="block text-gray-700 font-medium mb-1">Address</label><input type="text" name="address" value={formData.address} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
+                            <div className="lg:col-span-2"><label className="block text-gray-700 font-medium mb-1">Address</label><input type="text" name="address" value={formData.address} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
                             <div><label className="block text-gray-700 font-medium mb-1">Vehicle Number (Optional)</label><input type="text" name="vehicleNumber" value={formData.vehicleNumber} onChange={handleInputChange} className={`${baseFieldClasses} uppercase`} /></div>
                         </div>
                     </section>
                     <section>
                         <h3 className="text-xl font-bold text-slate-700 mb-4 border-l-4 border-blue-500 pl-3">Purpose of Visit</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-lg border">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4 bg-slate-50 rounded-lg border">
                             <div><label className="block text-gray-700 font-medium mb-1">Whom to Meet</label><input type="text" name="whomToMeet" value={formData.whomToMeet} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
                             <div><label className="block text-gray-700 font-medium mb-1">Place to Visit</label><input type="text" name="placeToVisit" value={formData.placeToVisit} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
                             <div><label className="block text-gray-700 font-medium mb-1">Person's Mobile (Optional)</label><input type="tel" name="personToMeetMobile" value={formData.personToMeetMobile} onChange={handleInputChange} className={baseFieldClasses} /></div>
-                            <div className="md:col-span-2"><label className="block text-gray-700 font-medium mb-1">Purpose</label><textarea name="purpose" value={formData.purpose} onChange={handleInputChange} required rows={3} className={`${baseFieldClasses} uppercase`}></textarea></div>
+                            <div className="lg:col-span-3"><label className="block text-gray-700 font-medium mb-1">Purpose</label><textarea name="purpose" value={formData.purpose} onChange={handleInputChange} required rows={3} className={`${baseFieldClasses} uppercase`}></textarea></div>
                         </div>
                     </section>
                     <div className="mt-8 border-t pt-6"><button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 transition duration-300 text-lg flex justify-center items-center disabled:bg-blue-400 disabled:cursor-wait">{isSubmitting ? 'Submitting...' : 'Generate & Preview Pass'}</button></div>
                 </form>
             </div>
 
-            <div className="bg-white p-8 rounded-lg shadow-lg">
+            <div className="bg-white p-8 rounded-lg shadow-lg max-w-screen-2xl mx-auto">
                 <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Visitor Logbook</h2>
                  <div className="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
                   <div className="flex space-x-2">

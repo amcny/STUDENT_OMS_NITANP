@@ -167,7 +167,7 @@ const RegisterStudent: React.FC = () => {
   };
 
   return (
-    <div className="bg-white p-8 rounded-lg shadow-xl max-w-4xl mx-auto">
+    <div className="bg-white p-8 rounded-lg shadow-xl max-w-screen-2xl mx-auto">
       <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Register New Student</h2>
       {alert && <div className="mb-6"><Alert message={alert.message} type={alert.type} onClose={() => setAlert(null)} /></div>}
       
@@ -175,7 +175,7 @@ const RegisterStudent: React.FC = () => {
         
         <section>
             <h3 className="text-xl font-bold text-slate-700 mb-4 border-l-4 border-blue-500 pl-3">Student Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-lg border">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 p-4 bg-slate-50 rounded-lg border">
                 {renderInput('name', 'Full Name')}
                 {renderInput('rollNumber', 'Roll Number')}
                 {renderInput('registrationNumber', 'Registration Number')}
@@ -185,14 +185,14 @@ const RegisterStudent: React.FC = () => {
 
         <section>
             <h3 className="text-xl font-bold text-slate-700 mb-4 border-l-4 border-blue-500 pl-3">Academic & Residential Info</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-lg border">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 p-4 bg-slate-50 rounded-lg border">
                 <CustomSelect name="branch" label="Branch" options={BRANCH_OPTIONS} value={formData.branch} onChange={handleSelectChange} required />
                 <CustomSelect name="year" label="Year" options={YEAR_OPTIONS} value={formData.year} onChange={handleSelectChange} required />
                 <CustomSelect name="gender" label="Gender" options={GENDER_OPTIONS} value={formData.gender} onChange={handleSelectChange} required />
                 <CustomSelect name="studentType" label="Student Type" options={STUDENT_TYPE_OPTIONS} value={formData.studentType} onChange={handleSelectChange} required />
                 
                 <div className={`
-                    md:col-span-2 
+                    lg:col-span-2 
                     grid 
                     transition-[grid-template-rows] duration-500 ease-in-out
                     ${isHosteller ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}
