@@ -86,7 +86,7 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
 
   return (
     <>
-      <div className="bg-white p-8 rounded-lg shadow-xl max-w-7xl mx-auto">
+      <div className="bg-white p-8 rounded-lg shadow-xl max-w-screen-2xl mx-auto">
         <div className="flex justify-between items-center border-b pb-4 mb-6">
             <h2 className="text-3xl font-bold text-gray-800">Student Database</h2>
             <button

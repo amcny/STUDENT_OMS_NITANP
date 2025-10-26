@@ -1,4 +1,4 @@
-import React, { useContext, useState, useMemo } from 'react';
+import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { OutingRecord, Student, OutingType } from '../types';
 import StudentProfileModal from './StudentProfileModal';
@@ -55,7 +55,49 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
   const [manualSearchTerm, setManualSearchTerm] = useState('');
   const [manualOutingType, setManualOutingType] = useState<OutingType>(OutingType.LOCAL);
   const [manualEntryAlert, setManualEntryAlert] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [suggestions, setSuggestions] = useState<Student[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedStudentForManualEntry, setSelectedStudentForManualEntry] = useState<Student | null>(null);
+  const manualSearchRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (manualSearchRef.current && !manualSearchRef.current.contains(event.target as Node)) {
+            setShowSuggestions(false);
+        }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleManualSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const term = e.target.value;
+    setManualSearchTerm(term);
+    setSelectedStudentForManualEntry(null); // Clear selection when user types again
+
+    if (term.length > 1) {
+        const lowerTerm = term.toLowerCase();
+        const filteredStudents = students.filter(student => 
+            student.rollNumber.toLowerCase().includes(lowerTerm) || 
+            student.registrationNumber.toLowerCase().includes(lowerTerm) ||
+            student.name.toLowerCase().includes(lowerTerm)
+        ).slice(0, 5); // Limit to 5 suggestions
+        setSuggestions(filteredStudents);
+        setShowSuggestions(true);
+    } else {
+        setSuggestions([]);
+        setShowSuggestions(false);
+    }
+  };
+
+  const handleSuggestionClick = (student: Student) => {
+    setSelectedStudentForManualEntry(student);
+    setManualSearchTerm('');
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
 
   const studentMap = useMemo(() => new Map<string, Student>(students.map(s => [s.id, s])), [students]);
 
@@ -113,17 +155,12 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
 
   const handleManualEntry = (action: 'check-out' | 'check-in') => {
     setManualEntryAlert(null);
-    const term = manualSearchTerm.trim().toUpperCase();
-    if (!term) {
-        setManualEntryAlert({ message: "Please enter a student's Roll Number or Registration Number.", type: 'error'});
+    if (!selectedStudentForManualEntry) {
+        setManualEntryAlert({ message: "Please search for and select a student first.", type: 'error'});
         return;
     }
 
-    const student = students.find(s => s.rollNumber.toUpperCase() === term || s.registrationNumber.toUpperCase() === term);
-    if (!student) {
-        setManualEntryAlert({ message: `No student found with identifier "${manualSearchTerm}".`, type: 'error'});
-        return;
-    }
+    const student = selectedStudentForManualEntry;
 
     if (action === 'check-out') {
         const hasActiveOuting = outingLogs.some(log => log.studentId === student.id && log.checkInTime === null);
@@ -165,7 +202,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         setOutingLogs(updatedLogs);
         setManualEntryAlert({ message: `${student.name} checked in successfully.`, type: 'success'});
     }
-    setManualSearchTerm('');
+    setSelectedStudentForManualEntry(null);
   };
 
   const sortedAndFilteredLogs = useMemo(() => {
@@ -274,16 +311,52 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             <h3 className="text-xl font-bold text-gray-800 mb-4">Manual Gate Entry</h3>
             {manualEntryAlert && <div className="mb-4"><Alert message={manualEntryAlert.message} type={manualEntryAlert.type} onClose={() => setManualEntryAlert(null)} /></div>}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                <div className="md:col-span-2">
-                    <label htmlFor="manualSearch" className="block text-gray-700 font-medium mb-1">Student Roll/Reg. Number</label>
-                    <input
-                        id="manualSearch"
-                        type="text"
-                        placeholder="Enter Roll or Registration Number"
-                        value={manualSearchTerm}
-                        onChange={(e) => setManualSearchTerm(e.target.value)}
-                        className="w-full uppercase px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-800"
-                    />
+                <div className="md:col-span-2" ref={manualSearchRef}>
+                    <label htmlFor="manualSearch" className="block text-gray-700 font-medium mb-1">
+                        {selectedStudentForManualEntry ? 'Selected Student' : 'Search Student (Name/Roll/Reg. No)'}
+                    </label>
+                    
+                    {selectedStudentForManualEntry ? (
+                        <div className="flex items-center p-2 bg-blue-100 border border-blue-300 rounded-md">
+                            <img src={selectedStudentForManualEntry.faceImage} alt={selectedStudentForManualEntry.name} className="w-10 h-10 rounded-full object-cover mr-3" />
+                            <div className="flex-grow">
+                                <p className="font-semibold text-blue-900">{selectedStudentForManualEntry.name}</p>
+                                <p className="text-sm text-blue-700">{selectedStudentForManualEntry.rollNumber}</p>
+                            </div>
+                            <button onClick={() => setSelectedStudentForManualEntry(null)} className="text-red-500 hover:text-red-700 font-bold text-xl ml-2">&times;</button>
+                        </div>
+                    ) : (
+                         <div className="relative">
+                            <input
+                                id="manualSearch"
+                                type="text"
+                                placeholder="Start typing to search..."
+                                value={manualSearchTerm}
+                                onChange={handleManualSearchChange}
+                                autoComplete="off"
+                                className="w-full uppercase px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-800"
+                            />
+                            {showSuggestions && suggestions.length > 0 && (
+                                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                    <ul>
+                                        {suggestions.map(student => (
+                                            <li 
+                                                key={student.id} 
+                                                className="p-2 hover:bg-blue-50 cursor-pointer flex items-center space-x-3"
+                                                onClick={() => handleSuggestionClick(student)}
+                                            >
+                                                <img src={student.faceImage} alt={student.name} className="w-10 h-10 rounded-full object-cover" />
+                                                <div>
+                                                    <p className="font-medium text-gray-800">{student.name}</p>
+                                                    <p className="text-sm text-gray-500">{student.rollNumber}</p>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                         </div>
+                    )}
                 </div>
                 <div>
                      <CustomSelect 
@@ -295,8 +368,20 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                     />
                 </div>
                 <div className="flex space-x-2">
-                    <button onClick={() => handleManualEntry('check-out')} className="w-full bg-red-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-red-600 transition">Check Out</button>
-                    <button onClick={() => handleManualEntry('check-in')} className="w-full bg-green-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-600 transition">Check In</button>
+                    <button 
+                        onClick={() => handleManualEntry('check-out')} 
+                        className="w-full bg-red-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-red-600 transition disabled:bg-gray-400"
+                        disabled={!selectedStudentForManualEntry}
+                    >
+                        Check Out
+                    </button>
+                    <button 
+                        onClick={() => handleManualEntry('check-in')} 
+                        className="w-full bg-green-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-green-600 transition disabled:bg-gray-400"
+                        disabled={!selectedStudentForManualEntry}
+                    >
+                        Check In
+                    </button>
                 </div>
             </div>
         </div>
