@@ -7,6 +7,14 @@ import { AppContext } from '../App';
 import { extractFaceFeatures } from '../services/facialRecognitionService';
 import CustomSelect from './CustomSelect';
 
+// Allow XLSX global
+declare var XLSX: any;
+
+const EXPECTED_HEADERS = [
+    'name', 'rollNumber', 'registrationNumber', 'contactNumber',
+    'branch', 'year', 'gender', 'studentType', 'hostel', 'roomNumber'
+];
+
 const BRANCH_OPTIONS = [
     'Biotechnology', 'Chemical Engineering', 'Civil Engineering', 
     'Computer Science & Engg.', 'Electrical Engineering', 'Electronics & Communication Engineering', 
@@ -36,6 +44,7 @@ const RegisterStudent: React.FC = () => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [isHostelDropdownOpen, setIsHostelDropdownOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (formData.studentType === 'Day-Scholar' && (formData.hostel !== '' || formData.roomNumber !== '')) {
@@ -94,6 +103,94 @@ const RegisterStudent: React.FC = () => {
     }
     // Reset file input to allow selecting the same file again
     e.target.value = '';
+  };
+  
+  const handleImportClick = () => {
+    importFileRef.current?.click();
+  };
+  
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setAlert({ message: 'Reading and processing Excel file...', type: 'info' });
+    setIsRegistering(true);
+
+    try {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        if (jsonData.length < 2) {
+            throw new Error("The Excel sheet is empty or contains only a header.");
+        }
+
+        const headers = jsonData[0].map(h => String(h).trim());
+        const headerMatch = JSON.stringify(headers) === JSON.stringify(EXPECTED_HEADERS);
+        if (!headerMatch) {
+            throw new Error(`Invalid headers. Expected: ${EXPECTED_HEADERS.join(', ')}`);
+        }
+        
+        const rows = jsonData.slice(1);
+        const newStudents: Student[] = [];
+        const existingRollNumbers = new Set(students.map(s => s.rollNumber));
+        const importedRollNumbers = new Set<string>();
+
+        for (const row of rows) {
+            if (row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) {
+                continue; // Skip empty rows
+            }
+
+            const rollNumber = String(row[1] || '').trim().toUpperCase();
+            if (!rollNumber) {
+                console.warn(`Skipping a row with a missing Roll Number.`);
+                continue; // Skip rows without a roll number
+            }
+            if (existingRollNumbers.has(rollNumber) || importedRollNumbers.has(rollNumber)) {
+                console.warn(`Skipping duplicate roll number: ${rollNumber}`);
+                continue;
+            }
+
+            const studentData: Omit<Student, 'id' | 'faceImage' | 'faceFeatures'> = {
+                name: String(row[0] || '').toUpperCase(),
+                rollNumber: rollNumber,
+                registrationNumber: String(row[2] || '').toUpperCase(),
+                contactNumber: String(row[3] || ''),
+                branch: String(row[4] || ''),
+                year: String(row[5] || ''),
+                gender: String(row[6] || ''),
+                studentType: String(row[7] || ''),
+                hostel: String(row[8] || ''),
+                roomNumber: String(row[9] || '').toUpperCase(),
+            };
+
+            newStudents.push({
+                ...studentData,
+                id: crypto.randomUUID(),
+                faceImage: null,
+                faceFeatures: null,
+            });
+            importedRollNumbers.add(rollNumber);
+        }
+
+        if (newStudents.length > 0) {
+            setStudents(prev => [...prev, ...newStudents]);
+            setAlert({ message: `Successfully imported ${newStudents.length} new students. Please add their photos from the 'All Students' page.`, type: 'success' });
+        } else {
+            setAlert({ message: 'No new students were imported. They may already exist in the database.', type: 'info' });
+        }
+
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+        console.error("Failed to import students:", error);
+        setAlert({ message: `Import failed: ${errorMessage}`, type: 'error' });
+    } finally {
+        setIsRegistering(false);
+        // Reset file input to allow re-selection of the same file
+        if (e.target) e.target.value = '';
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -168,7 +265,27 @@ const RegisterStudent: React.FC = () => {
 
   return (
     <div className="bg-white p-8 rounded-lg shadow-xl max-w-screen-2xl mx-auto">
-      <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Register New Student</h2>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-4 mb-6">
+        <h2 className="text-3xl font-bold text-gray-800">Register New Student</h2>
+        <div className="mt-4 sm:mt-0">
+          <button
+            type="button"
+            onClick={handleImportClick}
+            disabled={isRegistering}
+            className="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition duration-300 flex items-center space-x-2 shadow-md hover:shadow-lg disabled:bg-gray-400"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 9.293a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+            <span>Import from Excel</span>
+          </button>
+          <input 
+            type="file"
+            ref={importFileRef}
+            onChange={handleFileImport}
+            className="hidden"
+            accept=".xlsx, .xls, .csv"
+          />
+        </div>
+      </div>
       {alert && <div className="mb-6"><Alert message={alert.message} type={alert.type} onClose={() => setAlert(null)} /></div>}
       
       <form onSubmit={handleSubmit} className="space-y-8">

@@ -125,10 +125,25 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
               {sortedAndFilteredStudents.map(student => (
                 <tr key={student.id} className="hover:bg-gray-50 transition-colors duration-150">
                   <td className="px-6 py-4">
-                    <img src={student.faceImage} alt={student.name} className="w-10 h-10 rounded-full object-cover" />
+                    {student.faceImage ? (
+                        <img src={student.faceImage} alt={student.name} className="w-10 h-10 rounded-full object-cover" />
+                    ) : (
+                        <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center" title="Biometric data missing">
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+                        </div>
+                    )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:underline cursor-pointer" onClick={() => setSelectedStudent(student)}>
-                    {student.name}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex items-center space-x-2">
+                        <span className="text-blue-600 hover:underline cursor-pointer" onClick={() => setSelectedStudent(student)}>
+                            {student.name}
+                        </span>
+                        {!student.faceImage && (
+                            <div title="Biometric data missing. Please edit to capture photo.">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.22 3.001-1.742 3.001H4.42c-1.522 0-2.492-1.667-1.742-3.001l5.58-9.92zM10 13a1 1 0 110-2 1 1 0 010 2zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                            </div>
+                        )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.rollNumber}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.branch}</td>

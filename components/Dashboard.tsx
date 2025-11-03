@@ -129,7 +129,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
             {studentsOnOuting.slice(0, 5).map(student => (
               <li key={student.id} className="py-3 flex justify-between items-center">
                 <div className="flex items-center space-x-4">
-                  <img className="h-10 w-10 rounded-full object-cover" src={student.faceImage} alt={student.name} />
+                  {student.faceImage ? (
+                    <img className="h-10 w-10 rounded-full object-cover" src={student.faceImage} alt={student.name} />
+                  ) : (
+                    <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
+                       <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+                    </div>
+                  )}
                   <div>
                     <p className="font-medium text-gray-900">{student.name}</p>
                     <p className="text-sm text-gray-500">{student.rollNumber} &bull; Year {student.year} &bull; {student.gender}</p>

@@ -318,7 +318,13 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                     
                     {selectedStudentForManualEntry ? (
                         <div className="flex items-center p-2 bg-blue-100 border border-blue-300 rounded-md">
-                            <img src={selectedStudentForManualEntry.faceImage} alt={selectedStudentForManualEntry.name} className="w-10 h-10 rounded-full object-cover mr-3" />
+                            {selectedStudentForManualEntry.faceImage ? (
+                                <img src={selectedStudentForManualEntry.faceImage} alt={selectedStudentForManualEntry.name} className="w-10 h-10 rounded-full object-cover mr-3" />
+                            ) : (
+                                <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center mr-3 flex-shrink-0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+                                </div>
+                            )}
                             <div className="flex-grow">
                                 <p className="font-semibold text-blue-900">{selectedStudentForManualEntry.name}</p>
                                 <p className="text-sm text-blue-700">{selectedStudentForManualEntry.rollNumber}</p>
@@ -345,7 +351,13 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                                                 className="p-2 hover:bg-blue-50 cursor-pointer flex items-center space-x-3"
                                                 onClick={() => handleSuggestionClick(student)}
                                             >
-                                                <img src={student.faceImage} alt={student.name} className="w-10 h-10 rounded-full object-cover" />
+                                                {student.faceImage ? (
+                                                    <img src={student.faceImage} alt={student.name} className="w-10 h-10 rounded-full object-cover" />
+                                                ) : (
+                                                    <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+                                                    </div>
+                                                )}
                                                 <div>
                                                     <p className="font-medium text-gray-800">{student.name}</p>
                                                     <p className="text-sm text-gray-500">{student.rollNumber}</p>

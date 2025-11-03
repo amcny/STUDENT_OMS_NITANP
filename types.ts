@@ -10,8 +10,8 @@ export interface Student {
   hostel: string; // Can be empty if studentType is 'Day-Scholar'
   roomNumber: string; // Can be empty if studentType is 'Day-Scholar'
   contactNumber: string;
-  faceImage: string; // base64 data URL
-  faceFeatures: number[]; // A vector representing facial features
+  faceImage: string | null; // base64 data URL
+  faceFeatures: number[] | null; // A vector representing facial features
 }
 
 export enum OutingType {
