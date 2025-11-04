@@ -5,34 +5,9 @@ import StudentProfileModal from './StudentProfileModal';
 import EditStudentModal from './EditStudentModal';
 import ConfirmationModal from './ConfirmationModal';
 
-type SortKey = 'name' | 'rollNumber' | 'branch' | 'year';
-type SortDirection = 'ascending' | 'descending';
-
 interface AllStudentsProps {
   onViewChange: (view: View) => void;
 }
-
-const SortableHeader: React.FC<{
-  label: string;
-  sortKey: SortKey;
-  sortConfig: { key: SortKey; direction: SortDirection };
-  onSort: (key: SortKey) => void;
-}> = ({ label, sortKey, sortConfig, onSort }) => {
-  const isSorted = sortConfig.key === sortKey;
-  const icon = isSorted ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : '↕';
-
-  return (
-    <th
-      className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200"
-      onClick={() => onSort(sortKey)}
-    >
-      <div className="flex items-center">
-        <span>{label}</span>
-        <span className="ml-2 text-gray-400">{icon}</span>
-      </div>
-    </th>
-  );
-};
 
 const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
   const { students, setStudents } = useContext(AppContext);
@@ -40,18 +15,6 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [studentToEdit, setStudentToEdit] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
-    key: 'name',
-    direction: 'ascending',
-  });
-
-  const handleSort = (key: SortKey) => {
-    let direction: SortDirection = 'ascending';
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
-  };
 
   const handleUpdateStudent = (updatedStudent: Student) => {
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
@@ -71,18 +34,21 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
       )
     );
 
+    const yearOrder: { [key: string]: number } = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4 };
+
     filtered.sort((a, b) => {
-      if (a[sortConfig.key] < b[sortConfig.key]) {
-        return sortConfig.direction === 'ascending' ? -1 : 1;
+      const yearA = yearOrder[a.year] || 0;
+      const yearB = yearOrder[b.year] || 0;
+
+      if (yearA !== yearB) {
+        return yearA - yearB;
       }
-      if (a[sortConfig.key] > b[sortConfig.key]) {
-        return sortConfig.direction === 'ascending' ? 1 : -1;
-      }
-      return 0;
+
+      return a.registrationNumber.localeCompare(b.registrationNumber);
     });
 
     return filtered;
-  }, [students, searchTerm, sortConfig]);
+  }, [students, searchTerm]);
 
   return (
     <>
@@ -113,10 +79,10 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
             <thead className="bg-gray-100">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Photo</th>
-                <SortableHeader label="Name" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Roll Number" sortKey="rollNumber" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Branch" sortKey="branch" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Year" sortKey="year" sortConfig={sortConfig} onSort={handleSort} />
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Registration Number</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Branch</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Year</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Contact</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Actions</th>
               </tr>
@@ -145,7 +111,7 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
                         )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.rollNumber}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.registrationNumber}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.branch}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.year}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.contactNumber}</td>
