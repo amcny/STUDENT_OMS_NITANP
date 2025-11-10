@@ -4,6 +4,9 @@ import { Student, View } from '../types';
 import StudentProfileModal from './StudentProfileModal';
 import EditStudentModal from './EditStudentModal';
 import ConfirmationModal from './ConfirmationModal';
+import CustomSelect from './CustomSelect';
+import { BRANCH_OPTIONS, YEAR_OPTIONS, GENDER_OPTIONS, STUDENT_TYPE_OPTIONS } from '../constants';
+
 
 interface AllStudentsProps {
   onViewChange: (view: View) => void;
@@ -12,12 +15,39 @@ interface AllStudentsProps {
 const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
   const { students, setStudents } = useContext(AppContext);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filters, setFilters] = useState({
+    year: 'All',
+    branch: 'All',
+    studentType: 'All',
+    gender: 'All',
+    missingPhoto: false,
+  });
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [studentToEdit, setStudentToEdit] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
   const headerCheckboxRef = useRef<HTMLInputElement>(null);
+  
+  const handleFilterChange = (name: string, value: string) => {
+    setFilters(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleMissingPhotoToggle = () => {
+    setFilters(prev => ({ ...prev, missingPhoto: !prev.missingPhoto }));
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      year: 'All',
+      branch: 'All',
+      studentType: 'All',
+      gender: 'All',
+      missingPhoto: false,
+    });
+    setSearchTerm('');
+  };
+
 
   const handleUpdateStudent = (updatedStudent: Student) => {
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
@@ -37,42 +67,48 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
 
 
   const sortedAndFilteredStudents = useMemo(() => {
-    let filtered = students.filter(student =>
-      Object.values(student).some(value =>
-        String(value).toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    );
+    let filtered = students.filter(student => {
+        if (filters.year !== 'All' && student.year !== filters.year) return false;
+        if (filters.branch !== 'All' && student.branch !== filters.branch) return false;
+        if (filters.studentType !== 'All' && student.studentType !== filters.studentType) return false;
+        if (filters.gender !== 'All' && student.gender !== filters.gender) return false;
+        if (filters.missingPhoto && student.faceImage !== null) return false;
+        
+        if (searchTerm) {
+             return Object.values(student).some(value =>
+                String(value).toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        }
+        return true;
+    });
 
     const yearOrder: { [key: string]: number } = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4 };
 
     filtered.sort((a, b) => {
       const yearA = yearOrder[a.year] || 0;
       const yearB = yearOrder[b.year] || 0;
-
-      if (yearA !== yearB) {
-        return yearA - yearB;
-      }
-
+      if (yearA !== yearB) return yearA - yearB;
       return a.registrationNumber.localeCompare(b.registrationNumber);
     });
 
     return filtered;
-  }, [students, searchTerm]);
+  }, [students, searchTerm, filters]);
   
   useEffect(() => {
     if (headerCheckboxRef.current) {
         const numSelected = selectedStudentIds.size;
         const numStudents = sortedAndFilteredStudents.length;
-        headerCheckboxRef.current.checked = numSelected > 0 && numSelected === numStudents;
-        headerCheckboxRef.current.indeterminate = numSelected > 0 && numSelected < numStudents;
+        const allSelected = numStudents > 0 && numSelected === numStudents;
+        headerCheckboxRef.current.checked = allSelected;
+        headerCheckboxRef.current.indeterminate = numSelected > 0 && !allSelected;
     }
   }, [selectedStudentIds, sortedAndFilteredStudents]);
   
-  const handleSelectAll = () => {
-    if (headerCheckboxRef.current?.checked) {
-      setSelectedStudentIds(new Set());
-    } else {
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
       setSelectedStudentIds(new Set(sortedAndFilteredStudents.map(s => s.id)));
+    } else {
+      setSelectedStudentIds(new Set());
     }
   };
 
@@ -103,38 +139,62 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
               <span>Back to Dashboard</span>
             </button>
         </div>
-        <div className="mb-6 flex justify-between items-center">
-          <input
-            type="text"
-            placeholder="Search all students..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full md:w-1/3 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 text-gray-800 shadow-sm transition duration-150 ease-in-out focus:bg-white"
-          />
-          {selectedStudentIds.size > 0 && (
-            <div className="flex items-center space-x-4">
-              <span className="text-sm font-medium text-gray-700">{selectedStudentIds.size} student(s) selected</span>
-              <button
-                onClick={() => setIsBulkDeleteModalOpen(true)}
-                className="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 transition duration-300 flex items-center space-x-2"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
-                <span>Delete Selected</span>
-              </button>
+        
+        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                <CustomSelect name="year" label="Year" options={['All', ...YEAR_OPTIONS]} value={filters.year} onChange={(name, val) => handleFilterChange(name, val)} />
+                <div className="xl:col-span-2">
+                    <CustomSelect name="branch" label="Branch" options={['All', ...BRANCH_OPTIONS]} value={filters.branch} onChange={(name, val) => handleFilterChange(name, val)} />
+                </div>
+                <CustomSelect name="studentType" label="Student Type" options={['All', ...STUDENT_TYPE_OPTIONS]} value={filters.studentType} onChange={(name, val) => handleFilterChange(name, val)} />
+                <CustomSelect name="gender" label="Gender" options={['All', ...GENDER_OPTIONS]} value={filters.gender} onChange={(name, val) => handleFilterChange(name, val)} />
+                 <div className="flex items-end">
+                    <button onClick={clearFilters} className="w-full bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-gray-700 transition duration-300">Clear Filters</button>
+                </div>
             </div>
-          )}
+             <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <input
+                    type="text"
+                    placeholder="Search by name, roll no, etc..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full sm:w-1/3 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900"
+                />
+                <label className="flex items-center space-x-2 cursor-pointer select-none">
+                    <input type="checkbox" checked={filters.missingPhoto} onChange={handleMissingPhotoToggle} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"/>
+                    <span className="text-gray-700 font-medium">Show only students with missing photos</span>
+                </label>
+            </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-white border border-gray-200">
-            <thead className="bg-gray-100">
+        
+        {selectedStudentIds.size > 0 && (
+          <div className="px-6 py-3 bg-sky-100/70 rounded-t-lg border-x border-t border-gray-200 flex justify-between items-center transition-all duration-300">
+            <span className="font-semibold text-sky-800">{selectedStudentIds.size} selected</span>
+            <button
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="p-2 text-gray-500 hover:bg-red-100 hover:text-red-700 rounded-full transition-colors"
+              title="Delete selected"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        <div className={`overflow-x-auto border ${selectedStudentIds.size > 0 ? 'rounded-b-lg border-t-0' : 'rounded-lg'}`}>
+          <table className="min-w-full bg-white">
+            <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3">
-                    <input 
-                        type="checkbox" 
-                        ref={headerCheckboxRef}
-                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        onChange={handleSelectAll}
-                    />
+                <th className="px-4 py-3">
+                    <div className="flex justify-center items-center">
+                        <input 
+                            type="checkbox" 
+                            ref={headerCheckboxRef}
+                            className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                            onChange={handleSelectAll}
+                        />
+                    </div>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Photo</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Name</th>
@@ -147,35 +207,42 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {sortedAndFilteredStudents.map(student => (
-                <tr key={student.id} className={`hover:bg-gray-50 transition-colors duration-150 ${selectedStudentIds.has(student.id) ? 'bg-blue-50' : ''}`}>
-                  <td className="px-6 py-4">
-                    <input 
-                        type="checkbox"
-                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        checked={selectedStudentIds.has(student.id)}
-                        onChange={(e) => handleSelectOne(student.id, e.target.checked)}
-                    />
+                <tr 
+                  key={student.id} 
+                  className={`transition-colors duration-150 ${selectedStudentIds.has(student.id) ? 'bg-sky-100/70' : 'hover:bg-gray-50'}`}
+                >
+                  <td className="px-4 py-4">
+                    <div className="flex justify-center items-center">
+                        <input 
+                            type="checkbox"
+                            className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                            checked={selectedStudentIds.has(student.id)}
+                            onChange={(e) => handleSelectOne(student.id, e.target.checked)}
+                        />
+                    </div>
                   </td>
                   <td className="px-6 py-4">
-                    {student.faceImage ? (
-                        <img src={student.faceImage} alt={student.name} className="w-10 h-10 rounded-full object-cover" />
-                    ) : (
-                        <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center" title="Biometric data missing">
-                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
-                        </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex items-center space-x-2">
-                        <span className="text-blue-600 hover:underline cursor-pointer" onClick={() => setSelectedStudent(student)}>
-                            {student.name}
-                        </span>
-                        {!student.faceImage && (
-                            <div title="Biometric data missing. Please edit to capture photo.">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.22 3.001-1.742 3.001H4.42c-1.522 0-2.492-1.667-1.742-3.001l5.58-9.92zM10 13a1 1 0 110-2 1 1 0 010 2zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                            </div>
+                    <div className="relative w-10 h-10">
+                        {student.faceImage ? (
+                            <img src={student.faceImage} alt={student.name} className="w-10 h-10 rounded-full object-cover" />
+                        ) : (
+                            <>
+                                <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center" title="Biometric data missing. Please edit to add a photo.">
+                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+                                </div>
+                                <div className="absolute -top-1 -right-1" title="Photo missing">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-500 bg-white rounded-full" viewBox="0 0 20 20" fill="currentColor">
+                                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                    </svg>
+                                </div>
+                            </>
                         )}
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <span className="text-blue-600 hover:underline cursor-pointer" onClick={() => setSelectedStudent(student)}>
+                        {student.name}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.registrationNumber}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.branch}</td>
@@ -197,11 +264,12 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
           </table>
           {sortedAndFilteredStudents.length === 0 && (
             <div className="text-center py-10 text-gray-500">
-              No students found.
+              No students found matching your criteria.
             </div>
           )}
         </div>
       </div>
+
       <StudentProfileModal isOpen={!!selectedStudent} onClose={() => setSelectedStudent(null)} student={selectedStudent} />
       
       <EditStudentModal 

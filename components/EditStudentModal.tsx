@@ -5,23 +5,10 @@ import CameraCapture from './CameraCapture';
 import Alert from './Alert';
 import { extractFaceFeatures } from '../services/facialRecognitionService';
 import CustomSelect from './CustomSelect';
-
-const BRANCH_OPTIONS = [
-    'Biotechnology', 'Chemical Engineering', 'Civil Engineering',
-    'Computer Science & Engg.', 'Electrical Engineering', 'Electronics & Communication Engineering',
-    'Mechanical Engineering', 'Metallurgical & Materials Engineering', 'School of Sciences',
-    'School of Humanities and Management'
-];
-const YEAR_OPTIONS = ['I', 'II', 'III', 'IV'];
-const GENDER_OPTIONS = ['Male', 'Female'];
-const STUDENT_TYPE_OPTIONS = ['Hosteller', 'Day-Scholar'];
-const BOYS_HOSTELS = [
-    'Godavari', 'Vamsadhara', 'Pranahita', 'Sabari', 'Indravathi',
-    'Nagavali', 'Purna', 'Manjeera', 'Banganga', 'Swarnamukhi'
-];
-const GIRLS_HOSTELS = [
-    'Krishnaveni', 'Bhima', 'Thungabhadra', 'Ghataprabha', 'Munneru'
-];
+import { 
+    BRANCH_OPTIONS, YEAR_OPTIONS, GENDER_OPTIONS, 
+    STUDENT_TYPE_OPTIONS, BOYS_HOSTELS, GIRLS_HOSTELS 
+} from '../constants';
 
 interface EditStudentModalProps {
     isOpen: boolean;
