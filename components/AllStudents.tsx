@@ -1,4 +1,4 @@
-import React, { useState, useContext, useMemo } from 'react';
+import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { Student, View } from '../types';
 import StudentProfileModal from './StudentProfileModal';
@@ -15,6 +15,9 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [studentToEdit, setStudentToEdit] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const headerCheckboxRef = useRef<HTMLInputElement>(null);
 
   const handleUpdateStudent = (updatedStudent: Student) => {
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
@@ -24,6 +27,12 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
     if (!studentToDelete) return;
     setStudents(prev => prev.filter(s => s.id !== studentToDelete.id));
     setStudentToDelete(null); // Close modal after deletion
+  };
+  
+  const handleBulkDelete = () => {
+    setStudents(prev => prev.filter(s => !selectedStudentIds.has(s.id)));
+    setSelectedStudentIds(new Set());
+    setIsBulkDeleteModalOpen(false);
   };
 
 
@@ -49,6 +58,35 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
 
     return filtered;
   }, [students, searchTerm]);
+  
+  useEffect(() => {
+    if (headerCheckboxRef.current) {
+        const numSelected = selectedStudentIds.size;
+        const numStudents = sortedAndFilteredStudents.length;
+        headerCheckboxRef.current.checked = numSelected > 0 && numSelected === numStudents;
+        headerCheckboxRef.current.indeterminate = numSelected > 0 && numSelected < numStudents;
+    }
+  }, [selectedStudentIds, sortedAndFilteredStudents]);
+  
+  const handleSelectAll = () => {
+    if (headerCheckboxRef.current?.checked) {
+      setSelectedStudentIds(new Set());
+    } else {
+      setSelectedStudentIds(new Set(sortedAndFilteredStudents.map(s => s.id)));
+    }
+  };
+
+  const handleSelectOne = (studentId: string, isChecked: boolean) => {
+    setSelectedStudentIds(prev => {
+        const newSet = new Set(prev);
+        if (isChecked) {
+            newSet.add(studentId);
+        } else {
+            newSet.delete(studentId);
+        }
+        return newSet;
+    });
+  };
 
   return (
     <>
@@ -65,7 +103,7 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
               <span>Back to Dashboard</span>
             </button>
         </div>
-        <div className="mb-6">
+        <div className="mb-6 flex justify-between items-center">
           <input
             type="text"
             placeholder="Search all students..."
@@ -73,11 +111,31 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
             onChange={e => setSearchTerm(e.target.value)}
             className="w-full md:w-1/3 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 text-gray-800 shadow-sm transition duration-150 ease-in-out focus:bg-white"
           />
+          {selectedStudentIds.size > 0 && (
+            <div className="flex items-center space-x-4">
+              <span className="text-sm font-medium text-gray-700">{selectedStudentIds.size} student(s) selected</span>
+              <button
+                onClick={() => setIsBulkDeleteModalOpen(true)}
+                className="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 transition duration-300 flex items-center space-x-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
+                <span>Delete Selected</span>
+              </button>
+            </div>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full bg-white border border-gray-200">
             <thead className="bg-gray-100">
               <tr>
+                <th className="px-6 py-3">
+                    <input 
+                        type="checkbox" 
+                        ref={headerCheckboxRef}
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        onChange={handleSelectAll}
+                    />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Photo</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Registration Number</th>
@@ -89,7 +147,15 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {sortedAndFilteredStudents.map(student => (
-                <tr key={student.id} className="hover:bg-gray-50 transition-colors duration-150">
+                <tr key={student.id} className={`hover:bg-gray-50 transition-colors duration-150 ${selectedStudentIds.has(student.id) ? 'bg-blue-50' : ''}`}>
+                  <td className="px-6 py-4">
+                    <input 
+                        type="checkbox"
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        checked={selectedStudentIds.has(student.id)}
+                        onChange={(e) => handleSelectOne(student.id, e.target.checked)}
+                    />
+                  </td>
                   <td className="px-6 py-4">
                     {student.faceImage ? (
                         <img src={student.faceImage} alt={student.name} className="w-10 h-10 rounded-full object-cover" />
@@ -143,7 +209,7 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
         onClose={() => setStudentToEdit(null)}
         student={studentToEdit}
         onSave={handleUpdateStudent}
-        existingRollNumbers={students.map(s => s.rollNumber)}
+        allStudents={students}
       />
       <ConfirmationModal
         isOpen={!!studentToDelete}
@@ -156,6 +222,13 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
             <strong className="text-gray-900">{studentToDelete?.name}</strong>? This action cannot be undone.
           </span>
         }
+      />
+      <ConfirmationModal
+        isOpen={isBulkDeleteModalOpen}
+        onClose={() => setIsBulkDeleteModalOpen(false)}
+        onConfirm={handleBulkDelete}
+        title={`Delete ${selectedStudentIds.size} Students`}
+        message={`Are you sure you want to delete the ${selectedStudentIds.size} selected students? This action cannot be undone.`}
       />
     </>
   );

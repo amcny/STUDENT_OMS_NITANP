@@ -135,28 +135,28 @@ const RegisterStudent: React.FC = () => {
         
         const rows = jsonData.slice(1);
         const newStudents: Student[] = [];
-        const existingRollNumbers = new Set(students.map(s => s.rollNumber));
-        const importedRollNumbers = new Set<string>();
+        const existingRegistrationNumbers = new Set(students.map(s => s.registrationNumber));
+        const importedRegistrationNumbers = new Set<string>();
 
         for (const row of rows) {
             if (row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) {
                 continue; // Skip empty rows
             }
 
-            const rollNumber = String(row[1] || '').trim().toUpperCase();
-            if (!rollNumber) {
-                console.warn(`Skipping a row with a missing Roll Number.`);
-                continue; // Skip rows without a roll number
+            const registrationNumber = String(row[2] || '').trim().toUpperCase();
+            if (!registrationNumber) {
+                console.warn(`Skipping a row with a missing Registration Number.`);
+                continue; // Skip rows without a registration number
             }
-            if (existingRollNumbers.has(rollNumber) || importedRollNumbers.has(rollNumber)) {
-                console.warn(`Skipping duplicate roll number: ${rollNumber}`);
+            if (existingRegistrationNumbers.has(registrationNumber) || importedRegistrationNumbers.has(registrationNumber)) {
+                console.warn(`Skipping duplicate registration number: ${registrationNumber}`);
                 continue;
             }
 
             const studentData: Omit<Student, 'id' | 'faceImage' | 'faceFeatures'> = {
                 name: String(row[0] || '').toUpperCase(),
-                rollNumber: rollNumber,
-                registrationNumber: String(row[2] || '').toUpperCase(),
+                rollNumber: String(row[1] || '').trim().toUpperCase(),
+                registrationNumber: registrationNumber,
                 contactNumber: String(row[3] || ''),
                 branch: String(row[4] || ''),
                 year: String(row[5] || ''),
@@ -172,7 +172,7 @@ const RegisterStudent: React.FC = () => {
                 faceImage: null,
                 faceFeatures: null,
             });
-            importedRollNumbers.add(rollNumber);
+            importedRegistrationNumbers.add(registrationNumber);
         }
 
         if (newStudents.length > 0) {

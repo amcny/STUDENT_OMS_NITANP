@@ -28,10 +28,10 @@ interface EditStudentModalProps {
     onClose: () => void;
     student: Student | null;
     onSave: (updatedStudent: Student) => void;
-    existingRollNumbers: string[];
+    allStudents: Student[];
 }
 
-const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, student, onSave, existingRollNumbers }) => {
+const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, student, onSave, allStudents }) => {
     const [formData, setFormData] = useState(student);
     const [faceImage, setFaceImage] = useState<string | null>(student?.faceImage || null);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -46,11 +46,11 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
     }, [student]);
 
 
-    if (!isOpen || !formData) return null;
+    if (!isOpen || !formData || !student) return null;
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        const uppercaseFields = ['name', 'roomNumber'];
+        const uppercaseFields = ['name', 'rollNumber', 'registrationNumber', 'roomNumber'];
         const processedValue = uppercaseFields.includes(name) ? value.toUpperCase() : value;
         
         setFormData(prev => prev ? { ...prev, [name]: processedValue } : null);
@@ -112,6 +112,20 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
             return;
         }
 
+        const otherStudents = allStudents.filter(s => s.id !== student.id);
+        const existingRollNumbers = otherStudents.map(s => s.rollNumber);
+        const existingRegistrationNumbers = otherStudents.map(s => s.registrationNumber);
+
+        if (existingRollNumbers.includes(formData.rollNumber)) {
+            setAlert({ message: 'Another student with this Roll Number already exists.', type: 'error' });
+            return;
+        }
+
+        if (existingRegistrationNumbers.includes(formData.registrationNumber)) {
+            setAlert({ message: 'Another student with this Registration Number already exists.', type: 'error' });
+            return;
+        }
+
         setIsSaving(true);
         
         try {
@@ -157,11 +171,11 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
                         </div>
                         <div>
                             <label htmlFor="rollNumber" className="block text-gray-700 font-medium mb-1">Roll Number</label>
-                            <input type="text" id="rollNumber" name="rollNumber" value={formData.rollNumber} required className={`${baseFieldClasses} uppercase bg-gray-200 cursor-not-allowed`} readOnly />
+                            <input type="text" id="rollNumber" name="rollNumber" value={formData.rollNumber} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} />
                         </div>
                         <div>
                             <label htmlFor="registrationNumber" className="block text-gray-700 font-medium mb-1">Registration Number</label>
-                            <input type="text" id="registrationNumber" name="registrationNumber" value={formData.registrationNumber} required className={`${baseFieldClasses} uppercase bg-gray-200 cursor-not-allowed`} readOnly />
+                            <input type="text" id="registrationNumber" name="registrationNumber" value={formData.registrationNumber} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} />
                         </div>
                         <div>
                             <label htmlFor="contactNumber" className="block text-gray-700 font-medium mb-1">Contact Number</label>
