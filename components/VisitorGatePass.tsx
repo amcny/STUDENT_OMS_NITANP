@@ -158,8 +158,13 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
             }
 
             if (key === 'inTime' || key === 'outTime') {
-                valA = new Date(valA as string).getTime();
-                valB = new Date(valB as string).getTime();
+                // Fix: Use separate numeric variables for date comparison to avoid type errors.
+                const timeA = new Date(valA as string).getTime();
+                const timeB = new Date(valB as string).getTime();
+
+                if (timeA < timeB) return sortConfig.direction === 'ascending' ? -1 : 1;
+                if (timeA > timeB) return sortConfig.direction === 'ascending' ? 1 : -1;
+                return 0;
             }
 
             if (valA! < valB!) return sortConfig.direction === 'ascending' ? -1 : 1;

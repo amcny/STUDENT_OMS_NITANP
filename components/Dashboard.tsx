@@ -122,43 +122,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
         />
       </div>
 
-      <div className="bg-white p-6 rounded-lg shadow-xl">
-        <h3 className="text-xl font-bold text-gray-800 mb-4">Students Currently on Outing</h3>
-        {studentsOnOuting.length > 0 ? (
-          <ul className="divide-y divide-gray-200">
-            {studentsOnOuting.slice(0, 5).map(student => (
-              <li key={student.id} className="py-3 flex justify-between items-center">
-                <div className="flex items-center space-x-4">
-                  {student.faceImage ? (
-                    <img className="h-10 w-10 rounded-full object-cover" src={student.faceImage} alt={student.name} />
-                  ) : (
-                    <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                       <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
-                    </div>
-                  )}
-                  <div>
-                    <p className="font-medium text-gray-900">{student.name}</p>
-                    <p className="text-sm text-gray-500">{student.rollNumber} &bull; Year {student.year} &bull; {student.gender}</p>
-                  </div>
-                </div>
-                <span className="text-sm text-gray-600">
-                  {outingLogs.find(log => log.studentId === student.id && !log.checkInTime)?.outingType} Outing
-                </span>
-              </li>
-            ))}
-            {studentsOnOuting.length > 5 && (
-              <li className="pt-4 text-center">
-                <button onClick={() => handleOpenModal('Students Currently Out', studentsOnOuting)} className="text-blue-600 hover:underline font-medium">
-                  View All {studentsOnOuting.length} Students
-                </button>
-              </li>
-            )}
-          </ul>
-        ) : (
-          <p className="text-center text-gray-500 py-4">All students are currently on campus.</p>
-        )}
-      </div>
-
       <StudentListModal 
         isOpen={isListModalOpen}
         onClose={handleCloseModal}
