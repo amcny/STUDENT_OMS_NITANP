@@ -20,7 +20,33 @@ const PassLayout: React.FC<{ passData: VisitorPassRecord }> = ({ passData }) => 
     <div style={{ width: '100%' }} className="bg-white p-4 border-2 border-black aspect-[1.414/1] flex flex-col">
         <div className="flex-grow">
             <header className="flex items-center gap-4 border-b-2 border-black pb-2 text-gray-800">
-                <svg className="w-16 h-16 text-gray-700 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1"><path d="M12 14l9-5-9-5-9 5 9 5z"></path><path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-5.998 12.078 12.078 0 01.665-6.479L12 14z"></path><path d="M12 14l9-5-9-5-9 5 9 5z" transform="translate(0, 6)"></path></svg>
+                <svg
+                    className="w-16 h-16 text-gray-700 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                    >
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1}
+                        d="M12 14l9-5-9-5-9 5 9 5z"
+                    />
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1}
+                        d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-5.998 12.078 12.078 0 01.665-6.479L12 14z"
+                    />
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1}
+                        d="M12 14l9-5-9-5-9 5 9 5z"
+                        transform="translate(0, 6)"
+                    />
+                </svg>
                 <div className="text-center flex-grow">
                     <h2 className="text-xl font-bold">NATIONAL INSTITUTE OF TECHNOLOGY, ANDHRA PRADESH</h2>
                     <p className="text-xs font-semibold">TADEPALLIGUDEM - 534101</p>

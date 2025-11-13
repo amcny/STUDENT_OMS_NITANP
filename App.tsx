@@ -1,4 +1,4 @@
-import React, { useState, createContext } from 'react';
+import React, { useState, createContext, useEffect } from 'react';
 import Header from './components/Header';
 import RegisterStudent from './components/RegisterStudent';
 import OutingKiosk from './components/OutingKiosk';
@@ -10,7 +10,7 @@ import Footer from './components/Footer';
 import Login from './components/Login';
 import { Student, OutingRecord, View, VisitorPassRecord } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
-import { STUDENTS_STORAGE_KEY, OUTING_LOGS_STORAGE_key, VISITOR_LOGS_STORAGE_KEY } from './constants';
+import { STUDENTS_STORAGE_KEY, OUTING_LOGS_STORAGE_key, VISITOR_LOGS_STORAGE_KEY, GATE_STORAGE_KEY } from './constants';
 
 interface AppContextType {
   students: Student[];
@@ -35,7 +35,15 @@ const App: React.FC = () => {
   const [students, setStudents] = useLocalStorage<Student[]>(STUDENTS_STORAGE_KEY, []);
   const [outingLogs, setOutingLogs] = useLocalStorage<OutingRecord[]>(OUTING_LOGS_STORAGE_key, []);
   const [visitorLogs, setVisitorLogs] = useLocalStorage<VisitorPassRecord[]>(VISITOR_LOGS_STORAGE_KEY, []);
-  const [gate, setGate] = useState<string | null>(null);
+  const [gate, setGate] = useLocalStorage<string | null>(GATE_STORAGE_KEY, null);
+  const [isKioskOnlyMode, setIsKioskOnlyMode] = useState(false);
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('view') === 'kiosk') {
+      setIsKioskOnlyMode(true);
+    }
+  }, []);
 
   const handleLogin = (gateName: string) => {
     setGate(gateName);
@@ -68,8 +76,20 @@ const App: React.FC = () => {
     return <Login onLogin={handleLogin} />;
   }
 
+  const appContextValue = { students, setStudents, outingLogs, setOutingLogs, visitorLogs, setVisitorLogs };
+
+  if (isKioskOnlyMode) {
+    return (
+      <AppContext.Provider value={appContextValue}>
+        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+          <OutingKiosk gate={gate} />
+        </div>
+      </AppContext.Provider>
+    );
+  }
+
   return (
-    <AppContext.Provider value={{ students, setStudents, outingLogs, setOutingLogs, visitorLogs, setVisitorLogs }}>
+    <AppContext.Provider value={appContextValue}>
       <div className="min-h-screen bg-slate-100 flex flex-col">
         <Header currentView={currentView} onViewChange={setCurrentView} gate={gate} onLogout={handleLogout} />
         <main className="container mx-auto p-6 flex-grow">

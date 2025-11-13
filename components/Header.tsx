@@ -29,6 +29,13 @@ const NavButton: React.FC<{
 };
 
 const Header: React.FC<HeaderProps> = ({ currentView, onViewChange, gate, onLogout }) => {
+  const handleKioskClick = () => {
+    // Open Kiosk in a new tab with a query parameter
+    window.open(window.location.pathname + '?view=kiosk', '_blank');
+  };
+  
+  const kioskButtonClasses = 'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 text-gray-300 hover:bg-slate-700 hover:text-white';
+
   return (
     <header className="bg-gradient-to-r from-slate-800 to-slate-900 shadow-lg sticky top-0 z-40">
       <nav className="container mx-auto px-6 py-3 flex justify-between items-center">
@@ -37,7 +44,12 @@ const Header: React.FC<HeaderProps> = ({ currentView, onViewChange, gate, onLogo
         </div>
         <div className="hidden md:flex flex-grow justify-center space-x-4">
             <NavButton label="Dashboard" view="dashboard" currentView={currentView} onViewChange={onViewChange} />
-            <NavButton label="Kiosk" view="kiosk" currentView={currentView} onViewChange={onViewChange} />
+            <button
+              onClick={handleKioskClick}
+              className={kioskButtonClasses}
+            >
+              Kiosk
+            </button>
             <NavButton label="Register Student" view="register" currentView={currentView} onViewChange={onViewChange} />
             <NavButton label="Logbook" view="logbook" currentView={currentView} onViewChange={onViewChange} />
             <NavButton label="Visitor Pass" view="visitorPass" currentView={currentView} onViewChange={onViewChange} />
