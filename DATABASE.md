@@ -43,19 +43,23 @@ This collection will store the profile of every registered student.
 
 ### b. `outingLogs` Collection
 
-This collection will track every student outing event.
+This collection will track every student outing event. It includes denormalized student data for efficient querying and display in the logbook.
 
 -   **Document ID:** Auto-generated unique ID (`outingRecord.id`).
 -   **Document Fields:**
     -   `studentId`: (string) The document ID of the student from the `students` collection. **Index this field.**
-    -   `studentName`: (string) Denormalized for quick display in the logbook.
+    -   `studentName`: (string) Denormalized for quick display.
     -   `rollNumber`: (string) Denormalized for quick display.
+    -   `year`: (string) Denormalized for filtering.
+    -   `gender`: (string) Denormalized for filtering.
+    -   `studentType`: (string) Denormalized for filtering.
     -   `outingType`: (string) "Local" or "Non-Local".
     -   `checkOutTime`: (timestamp) Firestore Timestamp object for precise, queryable time.
     -   `checkInTime`: (timestamp | null) Initially `null`. Updated on check-in. **Index this field.**
     -   `checkOutGate`: (string) e.g., "Front Gate"
     -   `checkInGate`: (string | null)
     -   `remarks`: (string, optional) Any notes added by the admin/guard.
+    -   `overdueResolved`: (boolean, optional) `true` if an admin manually cleared the overdue status.
 
 ### c. `visitorLogs` Collection
 
@@ -68,11 +72,13 @@ This collection will store records for every visitor pass generated.
     -   `inTime`: (timestamp) The exact time of entry.
     -   `outTime`: (timestamp | null) The exact time of departure. **Index this field.**
     -   `name`: (string) Visitor's name.
+    -   `relation`: (string) Visitor's relation to the person they are meeting.
     -   `mobileNumber`: (string) Visitor's contact number.
     -   `address`: (string)
     -   `vehicleNumber`: (string, optional)
     -   `whomToMeet`: (string) Name of the person being visited.
     -   `placeToVisit`: (string) e.g., "Godavari Hostel", "Admin Building"
+    -   `personToMeetMobile`: (string, optional) Mobile number of the person being visited.
     -   `purpose`: (string)
     -   `gateName`: (string) Entry gate name.
     -   `outGateName`: (string | null) Exit gate name.
