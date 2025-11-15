@@ -2,8 +2,6 @@ import React, { useContext, useMemo, useState, useRef } from 'react';
 import { AppContext } from '../App';
 import StudentListModal from './StudentListModal';
 import { Student, View, OutingType, VisitorPassRecord } from '../types';
-import LineChart from './charts/LineChart';
-import BarChart from './charts/BarChart';
 import DoughnutChart from './charts/DoughnutChart';
 import Spinner from './Spinner';
 
@@ -46,7 +44,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
   const [isListModalOpen, setIsListModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalStudents, setModalStudents] = useState<Student[]>([]);
-  const [timeRange, setTimeRange] = useState<'today' | 'last7' | 'last30'>('last7');
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   const reportRef = useRef<HTMLDivElement>(null);
@@ -114,85 +111,27 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
     return { localOutingsToday, nonLocalOutingsToday, visitorsToday };
   }, [outingLogs, visitorLogs]);
 
-  const filteredLogs = useMemo(() => {
-    const now = new Date();
-    const rangeStart = new Date();
-    
-    if (timeRange === 'today') {
-        rangeStart.setHours(0, 0, 0, 0);
-    } else if (timeRange === 'last7') {
-        rangeStart.setDate(now.getDate() - 7);
-        rangeStart.setHours(0, 0, 0, 0);
-    } else { // last30
-        rangeStart.setDate(now.getDate() - 30);
-        rangeStart.setHours(0, 0, 0, 0);
-    }
+  const todaysOutingLogs = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    return outingLogs.filter(log => new Date(log.checkOutTime) >= todayStart);
+  }, [outingLogs]);
 
-    return outingLogs.filter(log => new Date(log.checkOutTime) >= rangeStart);
-  }, [outingLogs, timeRange]);
 
-  const outingDataForRange = useMemo(() => {
+  const outingDataForToday = useMemo(() => {
     const studentIdsInOuting = new Set<string>();
-    filteredLogs.forEach(log => studentIdsInOuting.add(log.studentId));
+    todaysOutingLogs.forEach(log => studentIdsInOuting.add(log.studentId));
     const studentsInOuting = Array.from(studentIdsInOuting).map(id => studentMap.get(id)).filter((s): s is Student => !!s);
     return {
         students: studentsInOuting,
-        logs: filteredLogs
+        logs: todaysOutingLogs
     };
-  }, [filteredLogs, studentMap]);
+  }, [todaysOutingLogs, studentMap]);
 
   // --- Chart Data ---
 
-  const outingTrendsData = useMemo(() => {
-    const dateCounts = new Map<string, Set<string>>();
-    const labels: string[] = [];
-    const now = new Date();
-    
-    const rangeDays = timeRange === 'today' ? 1 : (timeRange === 'last7' ? 7 : 30);
-    for (let i = rangeDays - 1; i >= 0; i--) {
-        const d = new Date(now);
-        d.setDate(now.getDate() - i);
-        const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        labels.push(label);
-        dateCounts.set(label, new Set());
-    }
-
-    filteredLogs.forEach(log => {
-        const dateLabel = new Date(log.checkOutTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        if(dateCounts.has(dateLabel)) {
-            dateCounts.get(dateLabel)!.add(log.studentId);
-        }
-    });
-
-    const data = labels.map(label => dateCounts.get(label)?.size || 0);
-    return { labels, datasets: [{ label: 'Unique Students Out', data, borderColor: 'rgb(59, 130, 246)', tension: 0.1, fill: false }] };
-  }, [filteredLogs, timeRange]);
-
-  const peakHoursData = useMemo(() => {
-    const hours = Array(24).fill(0).map((_, i) => `${i}:00`);
-    const checkOuts = Array(24).fill(0);
-    const checkIns = Array(24).fill(0);
-    
-    filteredLogs.forEach(log => {
-        const outHour = new Date(log.checkOutTime).getHours();
-        checkOuts[outHour]++;
-        if (log.checkInTime) {
-            const inHour = new Date(log.checkInTime).getHours();
-            checkIns[inHour]++;
-        }
-    });
-    
-    return {
-        labels: hours,
-        datasets: [
-            { label: 'Check-outs', data: checkOuts, backgroundColor: 'rgba(239, 68, 68, 0.7)' },
-            { label: 'Check-ins', data: checkIns, backgroundColor: 'rgba(34, 197, 94, 0.7)' }
-        ]
-    };
-  }, [filteredLogs]);
-
   const demographicData = useMemo(() => {
-    const students = outingDataForRange.students;
+    const students = outingDataForToday.students;
     const yearCounts = new Map<string, number>();
     const hostelCounts = new Map<string, number>();
 
@@ -216,7 +155,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
         byYear: createChartData(yearCounts),
         byHostel: createChartData(hostelCounts),
     };
-  }, [outingDataForRange.students]);
+  }, [outingDataForToday.students]);
 
   // --- Handlers ---
   
@@ -227,12 +166,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
   };
   
   const handleChartClick = (category: 'year' | 'hostel', label: string) => {
-    const filteredStudents = outingDataForRange.students.filter(s => {
+    const filteredStudents = outingDataForToday.students.filter(s => {
         if(category === 'year') return s.year === label;
         if(category === 'hostel') return s.hostel === label;
         return false;
     });
-    handleOpenModal(`Students from ${label} (${category})`, filteredStudents);
+    handleOpenModal(`Today's Outing Students from ${label} (${category})`, filteredStudents);
   };
 
   const handleGenerateReport = async () => {
@@ -296,13 +235,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <h2 className="text-3xl font-bold text-gray-800">Dashboard Overview</h2>
         <div className="flex items-center gap-4">
-            <div className="bg-white rounded-lg shadow p-1 flex space-x-1">
-                {(['today', 'last7', 'last30'] as const).map(range => (
-                    <button key={range} onClick={() => setTimeRange(range)} className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-colors ${timeRange === range ? 'bg-blue-500 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>
-                        {range === 'today' ? 'Today' : range === 'last7' ? 'Last 7 Days' : 'Last 30 Days'}
-                    </button>
-                ))}
-            </div>
              <button
                 onClick={handleGenerateReport}
                 disabled={isGeneratingReport}
@@ -325,10 +257,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
             <StatCard title="Currently Out" value={onOutingCount} color="bg-yellow-500" />
             <StatCard title="On Campus" value={totalStudents - onOutingCount} color="bg-green-500" />
         </div>
-        <div className="grid grid-cols-2 gap-8">
-            <div className="bg-white p-6 rounded-lg shadow-md border"><h3 className="text-xl font-bold mb-4">Outing Trends ({timeRange.replace('last', 'Last ')} Days)</h3><LineChart data={outingTrendsData} /></div>
-            <div className="bg-white p-6 rounded-lg shadow-md border"><h3 className="text-xl font-bold mb-4">Peak Activity Hours</h3><BarChart data={peakHoursData} /></div>
-        </div>
         {overdueStudents.length > 0 && <div className="mt-8">
             <h3 className="text-xl font-bold mb-4 text-red-600">Overdue Students ({overdueStudents.length})</h3>
             <ul className="grid grid-cols-3 gap-4">
@@ -337,11 +265,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
         </div>}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard title="Total Students" value={totalStudents} onClick={() => onViewChange('allStudents')} color="bg-gradient-to-br from-blue-500 to-blue-600" />
         <StatCard title="Currently Out" value={onOutingCount} onClick={() => handleOpenModal('Students Currently Out', studentsOnOuting)} color="bg-gradient-to-br from-yellow-500 to-yellow-600" />
         <StatCard title="On Campus" value={totalStudents - onOutingCount} color="bg-gradient-to-br from-green-500 to-green-600" />
-        <StatCard title="Unique Students Out" value={outingDataForRange.students.length} onClick={() => handleOpenModal(`Students Out (${timeRange.replace('last', 'Last ')} Days)`, outingDataForRange.students)} color="bg-gradient-to-br from-indigo-500 to-indigo-600" />
       </div>
 
       <div className="mt-8">
@@ -365,20 +292,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
         </div>
       )}
 
-      <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white p-6 rounded-lg shadow-lg border"><h3 className="text-xl font-bold mb-4 text-center text-gray-800">Outing Trends ({timeRange.replace('last', 'Last ')} Days)</h3><LineChart data={outingTrendsData} /></div>
-        <div className="bg-white p-6 rounded-lg shadow-lg border"><h3 className="text-xl font-bold mb-4 text-center text-gray-800">Peak Activity Hours</h3><BarChart data={peakHoursData} /></div>
-      </div>
-      
       <div className="mt-8 bg-white p-6 rounded-lg shadow-lg border">
-        <h3 className="text-xl font-bold mb-4 text-center text-gray-800">Outing Demographics ({timeRange.replace('last', 'Last ')} Days)</h3>
+        <h3 className="text-xl font-bold mb-4 text-center text-gray-800">Today's Outing Demographics</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
             <div>
               <h4 className="text-center font-semibold mb-2 text-gray-700">Demographics by Year</h4>
               {demographicData.byYear.datasets[0].data.length > 0 ? (
                 <DoughnutChart data={demographicData.byYear} onClick={(label) => handleChartClick('year', label)} />
               ) : (
-                <div className="flex items-center justify-center h-48 bg-gray-50 rounded-lg text-gray-500">No data available for this period.</div>
+                <div className="flex items-center justify-center h-48 bg-gray-50 rounded-lg text-gray-500">No data available for today.</div>
               )}
             </div>
             <div>
@@ -386,7 +308,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
               {demographicData.byHostel.datasets[0].data.length > 0 ? (
                 <DoughnutChart data={demographicData.byHostel} onClick={(label) => handleChartClick('hostel', label)} />
               ) : (
-                 <div className="flex items-center justify-center h-48 bg-gray-50 rounded-lg text-gray-500">No data available for this period.</div>
+                 <div className="flex items-center justify-center h-48 bg-gray-50 rounded-lg text-gray-500">No data available for today.</div>
               )}
             </div>
         </div>
