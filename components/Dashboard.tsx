@@ -32,9 +32,6 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, onClick, color 
   </div>
 );
 
-// --- Constants ---
-const OVERDUE_HOURS_NON_LOCAL = 72; // 3 days
-
 interface DashboardProps {
     onViewChange: (view: View) => void;
 }
@@ -59,32 +56,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
     return students.filter(student => onOutingIds.has(student.id));
   }, [outingLogs, students]);
 
-  const overdueStudents = useMemo(() => {
-    const now = new Date();
-    const overdueLogs = outingLogs.filter(log => {
-        // Not overdue if they've checked in
-        if (log.checkInTime !== null) return false;
-
-        if (log.outingType === OutingType.LOCAL) {
-            const checkOutDate = new Date(log.checkOutTime);
-            // Deadline is 9 PM on the day of checkout
-            const deadline = new Date(checkOutDate.getFullYear(), checkOutDate.getMonth(), checkOutDate.getDate(), 21, 0, 0);
-            return now > deadline;
-        }
-
-        if (log.outingType === OutingType.NON_LOCAL) {
-            const checkOutTime = new Date(log.checkOutTime).getTime();
-            const hoursPassed = (now.getTime() - checkOutTime) / (1000 * 60 * 60);
-            return hoursPassed > OVERDUE_HOURS_NON_LOCAL;
-        }
-
-        return false;
-    });
-
-    const overdueStudentIds = new Set(overdueLogs.map(log => log.studentId));
-    return students.filter(student => overdueStudentIds.has(student.id));
-  }, [outingLogs, students]);
-  
   const todaysStats = useMemo(() => {
     const today = new Date();
     const todayStr = today.toISOString().slice(0, 10);
@@ -257,12 +228,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
             <StatCard title="Currently Out" value={onOutingCount} color="bg-yellow-500" />
             <StatCard title="On Campus" value={totalStudents - onOutingCount} color="bg-green-500" />
         </div>
-        {overdueStudents.length > 0 && <div className="mt-8">
-            <h3 className="text-xl font-bold mb-4 text-red-600">Overdue Students ({overdueStudents.length})</h3>
-            <ul className="grid grid-cols-3 gap-4">
-                {overdueStudents.map(s => <li key={s.id} className="p-2 border rounded-md text-sm">{s.name} ({s.rollNumber})</li>)}
-            </ul>
-        </div>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -279,18 +244,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
             <StatCard title="Visitors Today" value={todaysStats.visitorsToday} color="bg-gradient-to-br from-slate-500 to-slate-600" />
         </div>
       </div>
-
-      {overdueStudents.length > 0 && (
-        <div className="mt-8 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg shadow-md hover:shadow-lg transition cursor-pointer" onClick={() => handleOpenModal('Overdue Students', overdueStudents)}>
-            <div className="flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-500 mr-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                <div>
-                    <h3 className="text-lg font-bold text-red-800">{overdueStudents.length} Student(s) Overdue</h3>
-                    <p className="text-red-700 text-sm">A student on a local outing is marked overdue if not checked in by 9 PM. Click to view.</p>
-                </div>
-            </div>
-        </div>
-      )}
 
       <div className="mt-8 bg-white p-6 rounded-lg shadow-lg border">
         <h3 className="text-xl font-bold mb-4 text-center text-gray-800">Today's Outing Demographics</h3>

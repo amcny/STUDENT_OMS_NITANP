@@ -3,6 +3,7 @@ import { AppContext } from '../App';
 import { OutingRecord, Student, OutingType } from '../types';
 import StudentProfileModal from './StudentProfileModal';
 import RemarksModal from './RemarksModal';
+import ViewRemarksModal from './ViewRemarksModal';
 import ConfirmationModal from './ConfirmationModal';
 import Alert from './Alert';
 import CustomSelect from './CustomSelect';
@@ -12,6 +13,9 @@ declare var XLSX: any;
 
 type SortKey = 'studentName' | 'rollNumber' | 'year' | 'gender' | 'outingType' | 'checkOutTime' | 'checkInTime' | 'checkOutGate' | 'checkInGate';
 type SortDirection = 'ascending' | 'descending';
+
+// --- Constants ---
+const OVERDUE_HOURS_NON_LOCAL = 72; // 3 days
 
 const SortableHeader: React.FC<{
   label: string;
@@ -41,12 +45,14 @@ interface LogbookProps {
 
 const Logbook: React.FC<LogbookProps> = ({ gate }) => {
   const { outingLogs, students, setOutingLogs } = useContext(AppContext);
-  const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'overdue'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [logToDelete, setLogToDelete] = useState<OutingRecord | null>(null);
   const [logToEditRemarks, setLogToEditRemarks] = useState<OutingRecord | null>(null);
+  const [logToViewRemarks, setLogToViewRemarks] = useState<OutingRecord | null>(null);
   const [logToToggleStatus, setLogToToggleStatus] = useState<OutingRecord | null>(null);
+  const [logToResolve, setLogToResolve] = useState<OutingRecord | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
     key: 'checkOutTime',
     direction: 'descending',
@@ -71,6 +77,29 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  const overdueLogs = useMemo(() => {
+    const now = new Date();
+    return outingLogs.filter(log => {
+        // Not overdue if they've checked in or if the status has been manually resolved
+        if (log.checkInTime !== null || log.overdueResolved) return false;
+
+        if (log.outingType === OutingType.LOCAL) {
+            const checkOutDate = new Date(log.checkOutTime);
+            // Deadline is 9 PM on the day of checkout
+            const deadline = new Date(checkOutDate.getFullYear(), checkOutDate.getMonth(), checkOutDate.getDate(), 21, 0, 0);
+            return now > deadline;
+        }
+
+        if (log.outingType === OutingType.NON_LOCAL) {
+            const checkOutTime = new Date(log.checkOutTime).getTime();
+            const hoursPassed = (now.getTime() - checkOutTime) / (1000 * 60 * 60);
+            return hoursPassed > OVERDUE_HOURS_NON_LOCAL;
+        }
+
+        return false;
+    });
+  }, [outingLogs]);
 
   const handleManualSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const term = e.target.value;
@@ -141,16 +170,50 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         prevLogs.map(log => {
             if (log.id === logToToggleStatus.id) {
                 const isReverting = !!log.checkInTime;
-                return {
-                    ...log,
-                    checkInTime: isReverting ? null : new Date().toISOString(),
-                    checkInGate: isReverting ? null : gate, 
-                };
+                if (isReverting) {
+                    // Reverting to 'Out'
+                    const newRemark = `Check-in reverted by ${gate} on ${new Date().toLocaleString()}`;
+                    return {
+                        ...log,
+                        checkInTime: null,
+                        checkInGate: null,
+                        remarks: log.remarks ? `${log.remarks}; ${newRemark}` : newRemark,
+                    };
+                } else {
+                    // Manual Check-In from actions column
+                    const newRemark = `Manual Check-In by ${gate} on ${new Date().toLocaleString()}`;
+                     return {
+                        ...log,
+                        checkInTime: new Date().toISOString(),
+                        checkInGate: gate, 
+                        remarks: log.remarks ? `${log.remarks}; ${newRemark}` : newRemark,
+                    };
+                }
             }
             return log;
         })
     );
     setLogToToggleStatus(null);
+  };
+
+  const handleConfirmResolveOverdue = () => {
+    if (!logToResolve) return;
+
+    setOutingLogs(prevLogs => {
+      return prevLogs.map(log => {
+        if (log.id === logToResolve.id) {
+          const newRemark = `Overdue status resolved by ${gate} on ${new Date().toLocaleString()}.`;
+          return {
+            ...log,
+            overdueResolved: true,
+            remarks: log.remarks ? `${log.remarks}; ${newRemark}` : newRemark,
+          };
+        }
+        return log;
+      });
+    });
+
+    setLogToResolve(null);
   };
 
   const handleManualEntry = (action: 'check-out' | 'check-in') => {
@@ -175,7 +238,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             year: student.year, gender: student.gender, studentType: student.studentType,
             outingType: manualOutingType, checkOutTime: new Date().toISOString(),
             checkInTime: null, checkOutGate: gate, checkInGate: null,
-            remarks: 'Manual Entry by Admin'
+            remarks: `Manual Check-Out by ${gate} on ${new Date().toLocaleString()}`
         };
         setOutingLogs(prev => [newLog, ...prev]);
         setManualEntryAlert({ message: `${student.name} checked out successfully.`, type: 'success'});
@@ -198,7 +261,8 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         }
 
         const updatedLogs = [...outingLogs];
-        updatedLogs[activeLogIndex] = { ...updatedLogs[activeLogIndex], checkInTime: new Date().toISOString(), checkInGate: gate, remarks: updatedLogs[activeLogIndex].remarks ? `${updatedLogs[activeLogIndex].remarks}; Manual Check-In` : 'Manual Check-In by Admin' };
+        const newRemark = `Manual Check-In by ${gate} on ${new Date().toLocaleString()}`;
+        updatedLogs[activeLogIndex] = { ...updatedLogs[activeLogIndex], checkInTime: new Date().toISOString(), checkInGate: gate, remarks: updatedLogs[activeLogIndex].remarks ? `${updatedLogs[activeLogIndex].remarks}; ${newRemark}` : newRemark };
         setOutingLogs(updatedLogs);
         setManualEntryAlert({ message: `${student.name} checked in successfully.`, type: 'success'});
     }
@@ -206,8 +270,10 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
   };
 
   const sortedAndFilteredLogs = useMemo(() => {
+    const overdueIds = new Set(overdueLogs.map(l => l.id));
     let filtered = outingLogs
       .filter(log => {
+        if (filter === 'overdue') return overdueIds.has(log.id);
         if (filter === 'active') return log.checkInTime === null;
         if (filter === 'completed') return log.checkInTime !== null;
         return true;
@@ -252,7 +318,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     });
 
     return filtered;
-  }, [outingLogs, filter, searchTerm, sortConfig, studentMap]);
+  }, [outingLogs, filter, searchTerm, sortConfig, studentMap, overdueLogs]);
 
   const handleExportToExcel = () => {
     if (typeof XLSX === 'undefined') {
@@ -307,6 +373,22 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
       <div className="bg-white p-8 rounded-lg shadow-lg max-w-screen-2xl mx-auto">
         <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Outing Logbook</h2>
         
+        {overdueLogs.length > 0 && filter !== 'overdue' && (
+          <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg shadow-md">
+            <div className="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-500 mr-4 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <div>
+                <h3 className="text-lg font-bold text-red-800">{overdueLogs.length} Student(s) are Overdue</h3>
+                <p className="text-red-700 text-sm">
+                  Click the "Overdue" filter to view them all and resolve their status from the actions column.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="bg-slate-50 p-6 rounded-lg shadow-md mb-6 border border-slate-200">
             <h3 className="text-xl font-bold text-gray-800 mb-4">Manual Gate Entry</h3>
             {manualEntryAlert && <div className="mb-4"><Alert message={manualEntryAlert.message} type={manualEntryAlert.type} onClose={() => setManualEntryAlert(null)} /></div>}
@@ -403,6 +485,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             <button onClick={() => setFilter('all')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}>All</button>
             <button onClick={() => setFilter('active')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'active' ? 'bg-yellow-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Active Outings</button>
             <button onClick={() => setFilter('completed')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'completed' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Completed</button>
+            <button onClick={() => setFilter('overdue')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'overdue' ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Overdue ({overdueLogs.length})</button>
           </div>
           <div className="flex items-center space-x-4 w-full md:w-auto">
             <input
@@ -447,6 +530,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
               {sortedAndFilteredLogs.length > 0 ? (
                 sortedAndFilteredLogs.map((log: OutingRecord) => {
                   const student = studentMap.get(log.studentId);
+                  const isOverdue = overdueLogs.some(overdueLog => overdueLog.id === log.id);
                   return (
                     <tr key={log.id} className="hover:bg-gray-50">
                         <td 
@@ -471,16 +555,27 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                             Completed
                             </span>
                         ) : (
-                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                            Out
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${isOverdue ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                            {isOverdue ? 'Overdue' : 'Out'}
                             </span>
                         )}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-500 max-w-[200px] truncate" title={log.remarks}>
-                            {log.remarks || 'N/A'}
+                        <td
+                          className={`px-6 py-4 text-sm text-gray-500 max-w-[200px] truncate ${log.remarks ? 'cursor-pointer hover:text-blue-600 hover:underline' : ''}`}
+                          title={log.remarks ? "Click to view full remarks" : "No remarks"}
+                          onClick={() => log.remarks && setLogToViewRemarks(log)}
+                        >
+                          {log.remarks || 'N/A'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex items-center space-x-4">
+                                {isOverdue && (
+                                     <button onClick={() => setLogToResolve(log)} className="text-gray-500 hover:text-green-600 transition-colors" title="Resolve Overdue">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                          <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                                        </svg>
+                                    </button>
+                                )}
                                 {log.checkInTime ? (
                                     <button onClick={() => setLogToToggleStatus(log)} className="text-gray-500 hover:text-yellow-600 transition-colors" title="Revert to 'Out'">
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.707-10.293a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L9.414 11H13a1 1 0 100-2H9.414l1.293-1.293z" clipRule="evenodd" /></svg>
@@ -513,6 +608,11 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         </div>
       </div>
       <StudentProfileModal isOpen={!!selectedStudent} onClose={() => setSelectedStudent(null)} student={selectedStudent} />
+      <ViewRemarksModal
+        isOpen={!!logToViewRemarks}
+        onClose={() => setLogToViewRemarks(null)}
+        log={logToViewRemarks}
+      />
       <RemarksModal
         isOpen={!!logToEditRemarks}
         onClose={() => setLogToEditRemarks(null)}
@@ -544,6 +644,20 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         }
         confirmButtonText="Confirm"
         confirmButtonClassName="bg-blue-600 hover:bg-blue-700"
+      />
+       <ConfirmationModal
+        isOpen={!!logToResolve}
+        onClose={() => setLogToResolve(null)}
+        onConfirm={handleConfirmResolveOverdue}
+        title="Resolve Overdue Status"
+        message={
+        <span>
+            Are you sure you want to resolve the overdue status for <strong className="text-gray-900">{logToResolve?.studentName}</strong>? 
+            A remark will be added to their log. This cannot be undone.
+        </span>
+        }
+        confirmButtonText="Confirm Resolve"
+        confirmButtonClassName="bg-green-600 hover:bg-green-700"
       />
     </>
   );

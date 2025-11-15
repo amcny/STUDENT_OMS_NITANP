@@ -33,6 +33,7 @@ export interface OutingRecord {
   remarks?: string;
   checkOutGate: string;
   checkInGate: string | null;
+  overdueResolved?: boolean;
 }
 
 export interface VisitorPassRecord {
