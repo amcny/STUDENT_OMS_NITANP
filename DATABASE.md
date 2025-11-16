@@ -1,3 +1,57 @@
+# Getting Started: Firebase Project Credentials
+
+To begin the migration to Firebase, I need the configuration details for your project. Please follow these steps and provide me with the resulting code snippet.
+
+### Step 1: Create a Firebase Project
+1.  Go to the [Firebase Console](https://console.firebase.google.com/).
+2.  Click **"Add project"** and give your project a name (e.g., "Student Outing System").
+3.  Follow the on-screen instructions to create the project. You can disable Google Analytics for this project if you wish.
+
+### Step 2: Create a Web App in Firebase
+1.  Once your project is created, you'll be on the project dashboard.
+2.  Click the **Web icon** (it looks like `</>`) to add a new web app to your project.
+3.  Give your app a nickname (e.g., "Outing Management Web App").
+4.  Click **"Register app"**. You do *not* need to set up Firebase Hosting at this stage.
+
+### Step 3: Get Your Firebase Configuration
+1.  After registering, Firebase will display a code snippet under the title "Install Firebase SDK".
+2.  Copy the entire `firebaseConfig` object. It will look like this:
+
+    ```javascript
+    const firebaseConfig = {
+      apiKey: "AIzaSyXXXXXXXXXXXXXXXXXXX",
+      authDomain: "your-project-id.firebaseapp.com",
+      projectId: "your-project-id",
+      storageBucket: "your-project-id.appspot.com",
+      messagingSenderId: "1234567890",
+      appId: "1:1234567890:web:abcdef123456"
+    };
+    ```
+3.  **Provide this entire `firebaseConfig` object to me.** This is the crucial piece of information I need to connect the application to your Firebase backend.
+
+### Step 4: Enable Required Firebase Services
+In the Firebase Console, on the left-hand menu under **"Build"**:
+1.  **Authentication:**
+    - Click on it, then click **"Get started"**.
+    - Under the "Sign-in method" tab, select **"Email/Password"** and **enable** it.
+2.  **Firestore Database:**
+    - Click on it, then click **"Create database"**.
+    - Choose to start in **Test mode**. This allows us to read and write freely during development. We will add security rules later.
+    - Select a location for your database (e.g., `us-central1`).
+3.  **Storage:**
+    - Click on it, then click **"Get started"**.
+    - Follow the prompts, accepting the default security rules for now.
+
+### Step 5: Create Initial Users
+1. Go back to **Authentication** and click on the **"Users"** tab.
+2. Click **"Add user"** and create the following two users:
+   - **Email:** `frontgate@nitanp.ac.in`, **Password:** `password123`
+   - **Email:** `backgate@nitanp.ac.in`, **Password:** `password123`
+
+Once you have completed these steps, please provide me with the `firebaseConfig` object from Step 3, and I will begin migrating the application's code.
+
+---
+
 # Firebase Backend & Database Migration Plan
 
 This document outlines the complete plan for migrating the Student Outing Management System from its current `localStorage`-based architecture to a robust, scalable, and real-time backend using **Google Firebase**. This "serverless" approach eliminates the need for manual backend development and provides a professional-grade infrastructure at no cost for the project's scale.

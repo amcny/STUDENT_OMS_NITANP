@@ -44,13 +44,13 @@ const Header: React.FC<HeaderProps> = ({ currentView, onViewChange, gate, onLogo
         </div>
         <div className="hidden md:flex flex-grow justify-center space-x-4">
             <NavButton label="Dashboard" view="dashboard" currentView={currentView} onViewChange={onViewChange} />
+            <NavButton label="Register Student" view="register" currentView={currentView} onViewChange={onViewChange} />
             <button
               onClick={handleKioskClick}
               className={kioskButtonClasses}
             >
               Kiosk
             </button>
-            <NavButton label="Register Student" view="register" currentView={currentView} onViewChange={onViewChange} />
             <NavButton label="Logbook" view="logbook" currentView={currentView} onViewChange={onViewChange} />
             <NavButton label="Visitor Pass" view="visitorPass" currentView={currentView} onViewChange={onViewChange} />
         </div>
