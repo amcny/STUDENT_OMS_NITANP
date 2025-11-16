@@ -6,7 +6,9 @@ import EditStudentModal from './EditStudentModal';
 import ConfirmationModal from './ConfirmationModal';
 import CustomSelect from './CustomSelect';
 import { BRANCH_OPTIONS, YEAR_OPTIONS, GENDER_OPTIONS, STUDENT_TYPE_OPTIONS } from '../constants';
+import Modal from './Modal';
 
+const SECURITY_PIN = '200405';
 
 interface AllStudentsProps {
   onViewChange: (view: View) => void;
@@ -26,7 +28,18 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
   const [studentToEdit, setStudentToEdit] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+  
+  // State for multi-step bulk delete
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  
+  // State for bulk select mode
+  const [isBulkSelectMode, setIsBulkSelectMode] = useState(false);
+
+  // Unified PIN state management
+  const [pinAction, setPinAction] = useState<{ action: 'singleDelete'; student: Student } | { action: 'bulkDelete' } | null>(null);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+  
   const headerCheckboxRef = useRef<HTMLInputElement>(null);
   
   const handleFilterChange = (name: string, value: string) => {
@@ -52,17 +65,36 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
   const handleUpdateStudent = (updatedStudent: Student) => {
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
   };
-
-  const handleDeleteStudent = () => {
-    if (!studentToDelete) return;
-    setStudents(prev => prev.filter(s => s.id !== studentToDelete.id));
-    setStudentToDelete(null); // Close modal after deletion
-  };
   
-  const handleBulkDelete = () => {
-    setStudents(prev => prev.filter(s => !selectedStudentIds.has(s.id)));
+  const handlePinConfirm = () => {
+    if (pinInput !== SECURITY_PIN) {
+        setPinError('Incorrect PIN. Please try again.');
+        setPinInput('');
+        return;
+    }
+
+    if (pinAction?.action === 'singleDelete') {
+        setStudents(prev => prev.filter(s => s.id !== pinAction.student.id));
+    } else if (pinAction?.action === 'bulkDelete') {
+        setStudents(prev => prev.filter(s => !selectedStudentIds.has(s.id)));
+        setSelectedStudentIds(new Set());
+        setIsBulkSelectMode(false); // Exit bulk select mode after deletion
+    }
+
+    setPinAction(null);
+    setPinInput('');
+    setPinError('');
+  };
+
+  const handlePinModalClose = () => {
+      setPinAction(null);
+      setPinInput('');
+      setPinError('');
+  };
+
+  const handleCancelBulkSelect = () => {
+    setIsBulkSelectMode(false);
     setSelectedStudentIds(new Set());
-    setIsBulkDeleteModalOpen(false);
   };
 
 
@@ -95,14 +127,14 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
   }, [students, searchTerm, filters]);
   
   useEffect(() => {
-    if (headerCheckboxRef.current) {
+    if (isBulkSelectMode && headerCheckboxRef.current) {
         const numSelected = selectedStudentIds.size;
         const numStudents = sortedAndFilteredStudents.length;
         const allSelected = numStudents > 0 && numSelected === numStudents;
         headerCheckboxRef.current.checked = allSelected;
         headerCheckboxRef.current.indeterminate = numSelected > 0 && !allSelected;
     }
-  }, [selectedStudentIds, sortedAndFilteredStudents]);
+  }, [selectedStudentIds, sortedAndFilteredStudents, isBulkSelectMode]);
   
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -167,35 +199,64 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
             </div>
         </div>
         
-        {selectedStudentIds.size > 0 && (
-          <div className="px-6 py-3 bg-sky-100/70 rounded-t-lg border-x border-t border-gray-200 flex justify-between items-center transition-all duration-300">
-            <span className="font-semibold text-sky-800">{selectedStudentIds.size} selected</span>
-            <button
-              onClick={() => setIsBulkDeleteModalOpen(true)}
-              className="p-2 text-gray-500 hover:bg-red-100 hover:text-red-700 rounded-full transition-colors"
-              title="Delete selected"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          </div>
-        )}
+        <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl font-bold text-gray-700">
+                {isBulkSelectMode
+                    ? `${selectedStudentIds.size} student(s) selected`
+                    : `${sortedAndFilteredStudents.length} Students Found`
+                }
+            </h3>
+            <div className="flex items-center space-x-4">
+                {isBulkSelectMode ? (
+                    <>
+                        <button
+                            onClick={() => setIsBulkDeleteModalOpen(true)}
+                            disabled={selectedStudentIds.size === 0}
+                            className="flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 disabled:bg-gray-400"
+                            title="Delete selected students"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            <span>Delete Selected</span>
+                        </button>
+                        <button
+                            onClick={handleCancelBulkSelect}
+                            className="px-4 py-2 text-sm font-medium rounded-md bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        >
+                            Cancel
+                        </button>
+                    </>
+                ) : (
+                    <button
+                        onClick={() => setIsBulkSelectMode(true)}
+                        className="flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                        <span>Bulk Select</span>
+                    </button>
+                )}
+            </div>
+        </div>
 
-        <div className={`overflow-x-auto border ${selectedStudentIds.size > 0 ? 'rounded-b-lg border-t-0' : 'rounded-lg'}`}>
+        <div className="overflow-x-auto border rounded-lg">
           <table className="min-w-full bg-white">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3">
-                    <div className="flex justify-center items-center">
-                        <input 
-                            type="checkbox" 
-                            ref={headerCheckboxRef}
-                            className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                            onChange={handleSelectAll}
-                        />
-                    </div>
-                </th>
+                {isBulkSelectMode && (
+                  <th className="px-4 py-3">
+                      <div className="flex justify-center items-center">
+                          <input 
+                              type="checkbox" 
+                              ref={headerCheckboxRef}
+                              className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                              onChange={handleSelectAll}
+                          />
+                      </div>
+                  </th>
+                )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Photo</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Registration Number</th>
@@ -209,18 +270,20 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
               {sortedAndFilteredStudents.map(student => (
                 <tr 
                   key={student.id} 
-                  className={`transition-colors duration-150 ${selectedStudentIds.has(student.id) ? 'bg-sky-100/70' : 'hover:bg-gray-50'}`}
+                  className={`transition-colors duration-150 ${isBulkSelectMode && selectedStudentIds.has(student.id) ? 'bg-sky-100/70' : 'hover:bg-gray-50'}`}
                 >
-                  <td className="px-4 py-4">
-                    <div className="flex justify-center items-center">
-                        <input 
-                            type="checkbox"
-                            className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                            checked={selectedStudentIds.has(student.id)}
-                            onChange={(e) => handleSelectOne(student.id, e.target.checked)}
-                        />
-                    </div>
-                  </td>
+                  {isBulkSelectMode && (
+                    <td className="px-4 py-4">
+                      <div className="flex justify-center items-center">
+                          <input 
+                              type="checkbox"
+                              className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                              checked={selectedStudentIds.has(student.id)}
+                              onChange={(e) => handleSelectOne(student.id, e.target.checked)}
+                          />
+                      </div>
+                    </td>
+                  )}
                   <td className="px-6 py-4">
                     <div className="relative w-10 h-10">
                         {student.faceImage ? (
@@ -282,7 +345,7 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
       <ConfirmationModal
         isOpen={!!studentToDelete}
         onClose={() => setStudentToDelete(null)}
-        onConfirm={handleDeleteStudent}
+        onConfirm={() => setPinAction({ action: 'singleDelete', student: studentToDelete! })}
         title="Delete Student"
         message={
           <span>
@@ -294,10 +357,48 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
       <ConfirmationModal
         isOpen={isBulkDeleteModalOpen}
         onClose={() => setIsBulkDeleteModalOpen(false)}
-        onConfirm={handleBulkDelete}
+        onConfirm={() => setPinAction({ action: 'bulkDelete' })}
         title={`Delete ${selectedStudentIds.size} Students`}
-        message={`Are you sure you want to delete the ${selectedStudentIds.size} selected students? This action cannot be undone.`}
+        message={`This will permanently delete the ${selectedStudentIds.size} selected students. This action cannot be undone.`}
+        confirmButtonText="Proceed"
+        confirmButtonClassName="bg-red-600 hover:bg-red-700"
       />
+
+    <Modal isOpen={!!pinAction} onClose={handlePinModalClose} title="Security Verification" size="sm">
+        <div className="space-y-4">
+            <p className="text-gray-700 text-center">
+              {pinAction?.action === 'singleDelete'
+                ? (
+                    <span>
+                        To confirm the deletion of <strong className="text-red-600">{pinAction.student.name}</strong>, please enter the security PIN.
+                    </span>
+                  )
+                : (
+                    <span>
+                        To confirm the deletion of <strong className="text-red-600">{selectedStudentIds.size}</strong> student(s), please enter the security PIN.
+                    </span>
+                  )
+              }
+            </p>
+
+            <input 
+                type="password"
+                value={pinInput}
+                onChange={(e) => { setPinInput(e.target.value); setPinError(''); }}
+                className="w-full text-center tracking-widest text-2xl px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                maxLength={6}
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handlePinConfirm()}
+            />
+
+            {pinError && <p className="text-red-500 text-sm text-center">{pinError}</p>}
+
+            <div className="flex justify-end space-x-4 pt-4">
+                <button onClick={handlePinModalClose} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold">Cancel</button>
+                <button onClick={handlePinConfirm} className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold">Confirm & Delete</button>
+            </div>
+        </div>
+    </Modal>
     </>
   );
 };

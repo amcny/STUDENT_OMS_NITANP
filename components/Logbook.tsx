@@ -7,15 +7,17 @@ import ViewRemarksModal from './ViewRemarksModal';
 import ConfirmationModal from './ConfirmationModal';
 import Alert from './Alert';
 import CustomSelect from './CustomSelect';
+import Modal from './Modal';
 
 // Allow TypeScript to recognize the XLSX global variable from the script tag
 declare var XLSX: any;
 
-type SortKey = 'studentName' | 'rollNumber' | 'year' | 'gender' | 'outingType' | 'checkOutTime' | 'checkInTime' | 'checkOutGate' | 'checkInGate';
+type SortKey = 'studentName' | 'year' | 'gender' | 'outingType' | 'checkOutTime' | 'checkInTime' | 'checkOutGate' | 'checkInGate';
 type SortDirection = 'ascending' | 'descending';
 
 // --- Constants ---
 const OVERDUE_HOURS_NON_LOCAL = 72; // 3 days
+const SECURITY_PIN = '200405';
 
 const SortableHeader: React.FC<{
   label: string;
@@ -66,6 +68,20 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
   const [selectedStudentForManualEntry, setSelectedStudentForManualEntry] = useState<Student | null>(null);
   const manualSearchRef = useRef<HTMLDivElement>(null);
 
+  // Unified PIN state management
+  const [pinAction, setPinAction] = useState<{ action: 'singleDelete'; log: OutingRecord } | { action: 'bulkDelete' } | null>(null);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+
+  // Bulk Delete State
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [bulkDeleteConfig, setBulkDeleteConfig] = useState<{
+      range: '3m' | '6m' | '1y' | 'all';
+      logs: OutingRecord[];
+      hasExported: boolean;
+  }>({ range: '3m', logs: [], hasExported: false });
+
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
         if (manualSearchRef.current && !manualSearchRef.current.contains(event.target as Node)) {
@@ -84,22 +100,43 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         // Not overdue if they've checked in or if the status has been manually resolved
         if (log.checkInTime !== null || log.overdueResolved) return false;
 
+        const checkOutDate = new Date(log.checkOutTime);
+        let deadline: Date;
         if (log.outingType === OutingType.LOCAL) {
-            const checkOutDate = new Date(log.checkOutTime);
             // Deadline is 9 PM on the day of checkout
-            const deadline = new Date(checkOutDate.getFullYear(), checkOutDate.getMonth(), checkOutDate.getDate(), 21, 0, 0);
-            return now > deadline;
+            deadline = new Date(checkOutDate.getFullYear(), checkOutDate.getMonth(), checkOutDate.getDate(), 21, 0, 0);
+        } else {
+             // Deadline is 72 hours after checkout
+            deadline = new Date(checkOutDate.getTime() + OVERDUE_HOURS_NON_LOCAL * 60 * 60 * 1000);
         }
-
-        if (log.outingType === OutingType.NON_LOCAL) {
-            const checkOutTime = new Date(log.checkOutTime).getTime();
-            const hoursPassed = (now.getTime() - checkOutTime) / (1000 * 60 * 60);
-            return hoursPassed > OVERDUE_HOURS_NON_LOCAL;
-        }
-
-        return false;
+        return now > deadline;
     });
   }, [outingLogs]);
+
+  // Effect to calculate logs for bulk deletion when modal opens or range changes
+  useEffect(() => {
+      if (!isBulkDeleteModalOpen) return;
+
+      const now = new Date();
+      const getCutoffDate = (range: string): Date | null => {
+          const cutoff = new Date(now);
+          switch (range) {
+              case '3m': cutoff.setMonth(now.getMonth() - 3); return cutoff;
+              case '6m': cutoff.setMonth(now.getMonth() - 6); return cutoff;
+              case '1y': cutoff.setFullYear(now.getFullYear() - 1); return cutoff;
+              case 'all': return null; // A null cutoff means delete all
+              default: return new Date(); // Should not happen
+          }
+      };
+
+      const cutoffDate = getCutoffDate(bulkDeleteConfig.range);
+      
+      const logsToPurge = cutoffDate === null
+          ? outingLogs
+          : outingLogs.filter(log => new Date(log.checkOutTime) < cutoffDate);
+
+      setBulkDeleteConfig(prev => ({ ...prev, logs: logsToPurge, hasExported: false }));
+  }, [isBulkDeleteModalOpen, bulkDeleteConfig.range, outingLogs]);
 
   const handleManualSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const term = e.target.value;
@@ -156,12 +193,6 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         log.id === logId ? { ...log, remarks } : log
       )
     );
-  };
-
-  const handleDeleteLog = () => {
-    if (!logToDelete) return;
-    setOutingLogs(prevLogs => prevLogs.filter(log => log.id !== logToDelete.id));
-    setLogToDelete(null);
   };
   
   const handleConfirmStatusToggle = () => {
@@ -285,7 +316,6 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
           const room = log.studentType === 'Hosteller' ? (student?.roomNumber || '') : '';
           return (
               log.studentName.toLowerCase().includes(term) ||
-              log.rollNumber.toLowerCase().includes(term) ||
               log.year.toLowerCase().includes(term) ||
               log.gender.toLowerCase().includes(term) ||
               hostel.toLowerCase().includes(term) ||
@@ -298,8 +328,8 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
 
     filtered.sort((a, b) => {
         const key = sortConfig.key;
-        let valA: string | number | null = a[key];
-        let valB: string | number | null = b[key];
+        let valA: string | number | null = a[key as keyof typeof a];
+        let valB: string | number | null = b[key as keyof typeof b];
 
         if (key === 'checkInTime' || key === 'checkInGate') {
             if (valA === null && valB !== null) return sortConfig.direction === 'ascending' ? 1 : -1;
@@ -320,18 +350,24 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     return filtered;
   }, [outingLogs, filter, searchTerm, sortConfig, studentMap, overdueLogs]);
 
-  const handleExportToExcel = () => {
+  const exportLogs = (logsToExport: OutingRecord[], fileName: string) => {
     if (typeof XLSX === 'undefined') {
         console.error("XLSX library is not loaded.");
         alert("Could not export to Excel. The required library is missing.");
-        return;
+        return false;
     }
 
-    const dataToExport = sortedAndFilteredLogs.map(log => {
+    if (logsToExport.length === 0) {
+        alert("No data to export.");
+        return false;
+    }
+
+    const dataToExport = logsToExport.map(log => {
         const student = studentMap.get(log.studentId);
         return {
             "Student Name": log.studentName,
-            "Roll Number": log.rollNumber,
+            "Registration Number": student?.registrationNumber || 'N/A',
+            "Branch": student?.branch || 'N/A',
             "Year": log.year,
             "Gender": log.gender,
             "Contact Number": student?.contactNumber || 'N/A',
@@ -343,15 +379,10 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             "Check-Out Gate": log.checkOutGate,
             "Check-In Time": formatDateTime(log.checkInTime),
             "Check-In Gate": log.checkInGate || 'N/A',
-            "Status": log.checkInTime ? 'Completed' : 'Out',
+            "Status": log.checkInTime ? 'Completed' : (overdueLogs.some(ol => ol.id === log.id) ? 'Overdue' : 'Out'),
             "Remarks": log.remarks || '',
         };
     });
-
-    if (dataToExport.length === 0) {
-        alert("No data to export.");
-        return;
-    }
 
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
@@ -365,8 +396,68 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     }));
     worksheet["!cols"] = colWidths;
 
-    XLSX.writeFile(workbook, "Student_Outing_Logbook.xlsx");
+    XLSX.writeFile(workbook, fileName);
+    return true;
   };
+
+  const handleExportToExcel = () => {
+    exportLogs(sortedAndFilteredLogs, "Student_Outing_Logbook.xlsx");
+  };
+
+  // Bulk Delete Handlers
+  const handleExportForDeletion = () => {
+    const success = exportLogs(
+        bulkDeleteConfig.logs,
+        `DELETION_EXPORT_Logs_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+    if (success) {
+        setBulkDeleteConfig(prev => ({ ...prev, hasExported: true }));
+    }
+  };
+  
+  const handleProceedToPin = () => {
+    setPinAction({ action: 'bulkDelete' });
+    setIsBulkDeleteModalOpen(false);
+    setPinError('');
+    setPinInput('');
+  };
+  
+  const handlePinConfirm = () => {
+    if (pinInput !== SECURITY_PIN) {
+        setPinError('Incorrect PIN. Please try again.');
+        setPinInput('');
+        return;
+    }
+    
+    let deletedCount = 0;
+
+    if (pinAction?.action === 'singleDelete') {
+        setOutingLogs(prev => prev.filter(log => log.id !== pinAction.log.id));
+        deletedCount = 1;
+    } else if (pinAction?.action === 'bulkDelete') {
+        const idsToDelete = new Set(bulkDeleteConfig.logs.map(log => log.id));
+        setOutingLogs(prev => prev.filter(log => !idsToDelete.has(log.id)));
+        deletedCount = idsToDelete.size;
+        setBulkDeleteConfig({ range: '3m', logs: [], hasExported: false });
+    }
+  
+    setManualEntryAlert({
+        message: `${deletedCount} log(s) have been permanently deleted.`,
+        type: 'success',
+    });
+  
+    // Reset PIN state
+    setPinAction(null);
+    setPinInput('');
+    setPinError('');
+  };
+
+  const handlePinModalClose = () => {
+    setPinAction(null);
+    setPinInput('');
+    setPinError('');
+  };
+
 
   return (
     <>
@@ -505,6 +596,16 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
               </svg>
               <span>Export</span>
             </button>
+            <button
+                onClick={() => setIsBulkDeleteModalOpen(true)}
+                className="flex-shrink-0 flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
+                title="Bulk delete old logs"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
+                </svg>
+                <span>Bulk Delete</span>
+            </button>
           </div>
         </div>
 
@@ -513,7 +614,6 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             <thead className="bg-gray-100">
               <tr>
                 <SortableHeader label="Student Name" sortKey="studentName" sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHeader label="Roll Number" sortKey="rollNumber" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader label="Year" sortKey="year" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Hostel/Room</th>
                 <SortableHeader label="Outing Type" sortKey="outingType" sortConfig={sortConfig} onSort={handleSort} />
@@ -531,6 +631,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                 sortedAndFilteredLogs.map((log: OutingRecord) => {
                   const student = studentMap.get(log.studentId);
                   const isOverdue = overdueLogs.some(overdueLog => overdueLog.id === log.id);
+
                   return (
                     <tr key={log.id} className="hover:bg-gray-50">
                         <td 
@@ -539,7 +640,6 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                         >
                         {log.studentName}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.rollNumber}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.year}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {log.studentType === 'Hosteller' ? `${student?.hostel || 'N/A'} / ${student?.roomNumber || 'N/A'}` : 'Day-Scholar'}
@@ -598,7 +698,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={13} className="text-center py-10 text-gray-500">
+                  <td colSpan={11} className="text-center py-10 text-gray-500">
                     No logs found matching your criteria.
                   </td>
                 </tr>
@@ -622,7 +722,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
       <ConfirmationModal
         isOpen={!!logToDelete}
         onClose={() => setLogToDelete(null)}
-        onConfirm={handleDeleteLog}
+        onConfirm={() => setPinAction({ action: 'singleDelete', log: logToDelete! })}
         title="Delete Outing Log"
         message={
           <span>
@@ -659,6 +759,127 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         confirmButtonText="Confirm Resolve"
         confirmButtonClassName="bg-green-600 hover:bg-green-700"
       />
+
+    {/* Bulk Delete Modals */}
+    <Modal isOpen={isBulkDeleteModalOpen} onClose={() => setIsBulkDeleteModalOpen(false)} title="Bulk Log Deletion">
+      <div className="space-y-6">
+          {/* Step 1: Range Selection */}
+          <div>
+              <div className="flex items-center space-x-3 mb-3">
+                  <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white font-bold rounded-full text-lg">1</span>
+                  <h4 className="font-semibold text-xl text-gray-800">Select Deletion Range</h4>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(['3m', '6m', '1y', 'all'] as const).map(range => {
+                      const descriptions = { '3m': 'Older than 3 months', '6m': 'Older than 6 months', '1y': 'Older than 1 year', 'all': 'All logs' };
+                      return (
+                          <label key={range} className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 ${bulkDeleteConfig.range === range ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-50 border-gray-300'}`}>
+                              <input
+                                  type="radio"
+                                  name="deleteRange"
+                                  value={range}
+                                  checked={bulkDeleteConfig.range === range}
+                                  onChange={() => setBulkDeleteConfig(prev => ({ ...prev, range }))}
+                                  className="sr-only" // Hide the default radio button
+                              />
+                              <span className="font-semibold text-gray-800">{descriptions[range]}</span>
+                          </label>
+                      );
+                  })}
+              </div>
+              <div className="mt-4 p-4 bg-red-50 border-l-4 border-red-400 rounded-r-lg">
+                <div className="flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-3 flex-shrink-0 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.03-1.742 3.03H4.42c-1.532 0-2.492-1.696-1.742-3.03l5.58-9.92zM10 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <p className="text-lg font-semibold text-red-800">
+                        This will permanently delete <strong className="font-bold text-red-900">{bulkDeleteConfig.logs.length}</strong> log record(s).
+                    </p>
+                </div>
+              </div>
+          </div>
+
+          {/* Step 2: Export */}
+          <div>
+              <div className="flex items-center space-x-3 mb-3">
+                  <span className={`flex items-center justify-center w-8 h-8 font-bold rounded-full text-lg ${bulkDeleteConfig.logs.length > 0 ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>2</span>
+                  <h4 className="font-semibold text-xl text-gray-800">Export for Archiving (Required)</h4>
+              </div>
+              <div className="p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 rounded-r-lg">
+                  <div className="flex items-start">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.03-1.742 3.03H4.42c-1.532 0-2.492-1.696-1.742-3.03l5.58-9.92zM10 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <div>
+                          <h4 className="font-bold">Important!</h4>
+                          <p className="text-sm">Once logs are deleted, they cannot be recovered. You must export the data for your records before proceeding.</p>
+                      </div>
+                  </div>
+              </div>
+              <button 
+                  onClick={handleExportForDeletion} 
+                  disabled={bulkDeleteConfig.logs.length === 0}
+                  className="mt-3 w-full bg-green-600 text-white font-semibold py-3 px-4 rounded-md hover:bg-green-700 transition disabled:bg-gray-400 flex items-center justify-center space-x-2"
+              >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2V7a5 5 0 00-5-5zm0 2a3 3 0 013 3v2H7V7a3 3 0 013-3z" />
+                  </svg>
+                  <span>Export {bulkDeleteConfig.logs.length} Records</span>
+              </button>
+          </div>
+
+          {/* Step 3: Delete */}
+          <div>
+              <div className="flex items-center space-x-3 mb-3">
+                  <span className={`flex items-center justify-center w-8 h-8 font-bold rounded-full text-lg ${bulkDeleteConfig.hasExported ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>3</span>
+                  <h4 className="font-semibold text-xl text-gray-800">Confirm Deletion</h4>
+              </div>
+              <button 
+                  onClick={handleProceedToPin} 
+                  disabled={!bulkDeleteConfig.hasExported || bulkDeleteConfig.logs.length === 0}
+                  className="w-full bg-red-600 text-white font-semibold py-3 px-4 rounded-md hover:bg-red-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                  title={!bulkDeleteConfig.hasExported ? "Please export the logs first" : ""}
+              >
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                       <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
+                   </svg>
+                   <span>Proceed to Delete...</span>
+              </button>
+          </div>
+      </div>
+    </Modal>
+    
+    <Modal isOpen={!!pinAction} onClose={handlePinModalClose} title="Security Verification" size="sm">
+        <div className="space-y-4">
+            <p className="text-gray-700 text-center">
+              {pinAction?.action === 'singleDelete'
+                ? 'To confirm this deletion, please enter the security PIN.'
+                : (
+                    <span>
+                        To confirm the deletion of <strong className="text-red-600">{bulkDeleteConfig.logs.length}</strong> log(s), please enter the security PIN.
+                    </span>
+                )
+              }
+            </p>
+
+            <input 
+                type="password"
+                value={pinInput}
+                onChange={(e) => { setPinInput(e.target.value); setPinError(''); }}
+                className="w-full text-center tracking-widest text-2xl px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                maxLength={6}
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handlePinConfirm()}
+            />
+
+            {pinError && <p className="text-red-500 text-sm text-center">{pinError}</p>}
+
+            <div className="flex justify-end space-x-4 pt-4">
+                <button onClick={handlePinModalClose} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold">Cancel</button>
+                <button onClick={handlePinConfirm} className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold">Confirm & Delete</button>
+            </div>
+        </div>
+    </Modal>
     </>
   );
 };

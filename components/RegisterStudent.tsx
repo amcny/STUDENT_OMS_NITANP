@@ -14,10 +14,7 @@ import {
 // Allow XLSX global
 declare var XLSX: any;
 
-const EXPECTED_HEADERS = [
-    'name', 'rollNumber', 'registrationNumber', 'contactNumber',
-    'branch', 'year', 'gender', 'studentType', 'hostel', 'roomNumber'
-];
+const MANDATORY_HEADERS = ['name', 'registrationNumber'];
 
 const INITIAL_FORM_DATA = {
     name: '', rollNumber: '', registrationNumber: '', contactNumber: '',
@@ -160,7 +157,7 @@ const RegisterStudent: React.FC = () => {
         }
 
         const headers = Object.keys(json[0]);
-        const missingHeaders = EXPECTED_HEADERS.filter(h => !headers.includes(h));
+        const missingHeaders = MANDATORY_HEADERS.filter(h => !headers.includes(h));
         if (missingHeaders.length > 0) {
             setExcelImportStatus({ message: `Missing required columns in Excel file: ${missingHeaders.join(', ')}`, type: 'error' });
             setIsImportingExcel(false);
@@ -171,10 +168,17 @@ const RegisterStudent: React.FC = () => {
         const existingRegNumbers = new Set(students.map(s => s.registrationNumber));
         const duplicateRegNumbersInFile = new Set<string>();
         let addedCount = 0;
+        let skippedCount = 0;
 
         for (const row of json) {
+            if (!row.name || !row.registrationNumber) {
+                skippedCount++;
+                continue; // Skip rows with missing mandatory data
+            }
+            
             const regNum = String(row.registrationNumber).toUpperCase();
             if (existingRegNumbers.has(regNum) || duplicateRegNumbersInFile.has(regNum)) {
+                skippedCount++;
                 continue; // Skip existing or duplicates within the file
             }
             duplicateRegNumbersInFile.add(regNum);
@@ -182,13 +186,13 @@ const RegisterStudent: React.FC = () => {
             newStudents.push({
                 id: crypto.randomUUID(),
                 name: String(row.name).toUpperCase(),
-                rollNumber: String(row.rollNumber).toUpperCase(),
+                rollNumber: String(row.rollNumber || '').toUpperCase(),
                 registrationNumber: regNum,
-                contactNumber: String(row.contactNumber),
-                branch: String(row.branch),
-                year: String(row.year),
-                gender: String(row.gender),
-                studentType: String(row.studentType),
+                contactNumber: String(row.contactNumber || ''),
+                branch: String(row.branch || ''),
+                year: String(row.year || ''),
+                gender: String(row.gender || ''),
+                studentType: String(row.studentType || ''),
                 hostel: String(row.hostel || ''),
                 roomNumber: String(row.roomNumber || '').toUpperCase(),
                 faceImage: null,
@@ -198,7 +202,7 @@ const RegisterStudent: React.FC = () => {
         }
         
         setStudents(prev => [...prev, ...newStudents]);
-        setExcelImportStatus({ message: `Successfully imported ${addedCount} new students. ${json.length - addedCount} duplicates were skipped.`, type: 'success' });
+        setExcelImportStatus({ message: `Successfully imported ${addedCount} new students. ${skippedCount} rows were skipped due to missing data or duplicates.`, type: 'success' });
 
       } catch (error) {
         console.error("Error processing Excel file:", error);
@@ -364,7 +368,7 @@ const RegisterStudent: React.FC = () => {
                 {/* Excel Import */}
                 <div className="p-4 rounded-lg bg-slate-50 border space-y-3">
                     <h4 className="text-lg font-semibold text-gray-600">1. Import from Excel</h4>
-                    <p className="text-sm text-gray-600">Upload an .xlsx file with student data. Required columns: {EXPECTED_HEADERS.slice(0, 8).join(', ')}, etc.</p>
+                    <p className="text-sm text-gray-600">Upload an .xlsx file with student data. Required columns: <strong className="text-gray-800">name, registrationNumber</strong>. Other columns are optional.</p>
                     <button type="button" onClick={handleExcelImportClick} disabled={isImportingExcel || isImportingPhotos} className="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition w-full flex items-center justify-center space-x-2 disabled:bg-gray-400"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg><span>{isImportingExcel ? 'Importing...' : 'Import from Excel'}</span></button>
                     <input type="file" ref={excelInputRef} onChange={handleExcelFileSelected} className="hidden" accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
                     {excelImportStatus && <div className="mt-2"><Alert message={excelImportStatus.message} type={excelImportStatus.type} onClose={() => setExcelImportStatus(null)} /></div>}
