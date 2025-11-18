@@ -328,8 +328,8 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
 
     filtered.sort((a, b) => {
         const key = sortConfig.key;
-        let valA: string | number | null = a[key as keyof typeof a];
-        let valB: string | number | null = b[key as keyof typeof b];
+        let valA: string | number | null = a[key];
+        let valB: string | number | null = b[key];
 
         if (key === 'checkInTime' || key === 'checkInGate') {
             if (valA === null && valB !== null) return sortConfig.direction === 'ascending' ? 1 : -1;
