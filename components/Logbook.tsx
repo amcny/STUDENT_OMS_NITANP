@@ -1,3 +1,4 @@
+
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { OutingRecord, Student, OutingType } from '../types';
@@ -272,10 +273,17 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
 
         const newLog: OutingRecord = {
             id: crypto.randomUUID(),
-            studentId: student.id, studentName: student.name, rollNumber: student.rollNumber,
-            year: student.year, gender: student.gender, studentType: student.studentType,
-            outingType: manualOutingType, checkOutTime: new Date().toISOString(),
-            checkInTime: null, checkOutGate: gate, checkInGate: null,
+            studentId: student.id,
+            studentName: student.name,
+            rollNumber: student.rollNumber,
+            year: student.year,
+            gender: student.gender,
+            studentType: student.studentType,
+            outingType: manualOutingType,
+            checkOutTime: new Date().toISOString(),
+            checkInTime: null,
+            checkOutGate: gate,
+            checkInGate: null,
             remarks: `Manual Check-Out by ${gate} on ${new Date().toLocaleString()}`
         };
         setOutingLogs(prev => [newLog, ...prev]);
@@ -436,17 +444,20 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         return;
     }
     
+    if (!pinAction) return;
+
     let deletedCount = 0;
 
-    if (pinAction?.action === 'singleDelete') {
-        setOutingLogs(prev => prev.filter(log => log.id !== pinAction.log.id));
+    if (pinAction.action === 'singleDelete') {
+        const logId = pinAction.log.id;
+        setOutingLogs(prev => prev.filter(log => log.id !== logId));
         deletedCount = 1;
-    } else if (pinAction?.action === 'bulkDelete') {
+    } else if (pinAction.action === 'bulkDelete') {
         const idsToDelete = new Set(bulkDeleteConfig.logs.map(log => log.id));
         setOutingLogs(prev => prev.filter(log => !idsToDelete.has(log.id)));
         deletedCount = idsToDelete.size;
         setBulkDeleteConfig({ range: '3m', logs: [], hasExported: false });
-    } else if (pinAction?.action === 'editRemarks') {
+    } else if (pinAction.action === 'editRemarks') {
          setLogToEditRemarks(pinAction.log);
          // No deletion message for edit
          setPinAction(null);
@@ -455,12 +466,10 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
          return;
     }
   
-    if (pinAction?.action !== 'editRemarks') {
-        setManualEntryAlert({
-            message: `${deletedCount} log(s) have been permanently deleted.`,
-            type: 'success',
-        });
-    }
+    setManualEntryAlert({
+        message: `${deletedCount} log(s) have been permanently deleted.`,
+        type: 'success',
+    });
   
     // Reset PIN state
     setPinAction(null);
@@ -585,44 +594,6 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                     </button>
                 </div>
             </div>
-        </div>
-
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
-          <div className="flex space-x-2">
-            <button onClick={() => setFilter('all')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}>All</button>
-            <button onClick={() => setFilter('active')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'active' ? 'bg-yellow-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Active Outings</button>
-            <button onClick={() => setFilter('completed')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'completed' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Completed</button>
-            <button onClick={() => setFilter('overdue')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'overdue' ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Overdue ({overdueLogs.length})</button>
-          </div>
-          <div className="flex items-center space-x-4 w-full md:w-auto">
-            <input
-              type="text"
-              placeholder="Search Logs..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full md:w-80 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-100 text-gray-800 shadow-sm transition duration-150 ease-in-out focus:bg-white"
-            />
-             <button
-              onClick={handleExportToExcel}
-              className="flex-shrink-0 flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors"
-              title="Export current view to Excel"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 9.293a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-              <span>Export</span>
-            </button>
-            <button
-                onClick={() => setIsBulkDeleteModalOpen(true)}
-                className="flex-shrink-0 flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
-                title="Bulk delete old logs"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
-                </svg>
-                <span>Bulk Delete</span>
-            </button>
-          </div>
         </div>
 
         <div className="overflow-x-auto">
