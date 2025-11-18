@@ -67,9 +67,10 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedStudentForManualEntry, setSelectedStudentForManualEntry] = useState<Student | null>(null);
   const manualSearchRef = useRef<HTMLDivElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
 
   // Unified PIN state management
-  const [pinAction, setPinAction] = useState<{ action: 'singleDelete'; log: OutingRecord } | { action: 'bulkDelete' } | null>(null);
+  const [pinAction, setPinAction] = useState<{ action: 'singleDelete' | 'editRemarks'; log: OutingRecord } | { action: 'bulkDelete' } | null>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
 
@@ -93,6 +94,12 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+  
+  useEffect(() => {
+      if (manualEntryAlert && topRef.current) {
+          topRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+  }, [manualEntryAlert]);
 
   const overdueLogs = useMemo(() => {
     const now = new Date();
@@ -439,12 +446,21 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         setOutingLogs(prev => prev.filter(log => !idsToDelete.has(log.id)));
         deletedCount = idsToDelete.size;
         setBulkDeleteConfig({ range: '3m', logs: [], hasExported: false });
+    } else if (pinAction?.action === 'editRemarks') {
+         setLogToEditRemarks(pinAction.log);
+         // No deletion message for edit
+         setPinAction(null);
+         setPinInput('');
+         setPinError('');
+         return;
     }
   
-    setManualEntryAlert({
-        message: `${deletedCount} log(s) have been permanently deleted.`,
-        type: 'success',
-    });
+    if (pinAction?.action !== 'editRemarks') {
+        setManualEntryAlert({
+            message: `${deletedCount} log(s) have been permanently deleted.`,
+            type: 'success',
+        });
+    }
   
     // Reset PIN state
     setPinAction(null);
@@ -461,7 +477,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
 
   return (
     <>
-      <div className="bg-white p-8 rounded-lg shadow-lg max-w-screen-2xl mx-auto">
+      <div ref={topRef} className="bg-white p-8 rounded-lg shadow-lg max-w-screen-2xl mx-auto">
         <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Outing Logbook</h2>
         
         {overdueLogs.length > 0 && filter !== 'overdue' && (
@@ -685,10 +701,10 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                                     </button>
                                 )}
-                                <button onClick={() => setLogToEditRemarks(log)} className="text-gray-500 hover:text-indigo-600 transition-colors" title="Edit Remarks">
+                                <button onClick={() => setPinAction({ action: 'editRemarks', log })} className="text-gray-500 hover:text-indigo-600 transition-colors" title="Edit Remarks">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" /></svg>
                                 </button>
-                                <button onClick={() => setLogToDelete(log)} className="text-gray-500 hover:text-red-600 transition-colors" title="Delete Log">
+                                <button onClick={() => setPinAction({ action: 'singleDelete', log })} className="text-gray-500 hover:text-red-600 transition-colors" title="Delete Log">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
                                 </button>
                             </div>
@@ -852,14 +868,13 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     <Modal isOpen={!!pinAction} onClose={handlePinModalClose} title="Security Verification" size="sm">
         <div className="space-y-4">
             <p className="text-gray-700 text-center">
-              {pinAction?.action === 'singleDelete'
-                ? 'To confirm this deletion, please enter the security PIN.'
-                : (
-                    <span>
-                        To confirm the deletion of <strong className="text-red-600">{bulkDeleteConfig.logs.length}</strong> log(s), please enter the security PIN.
-                    </span>
-                )
-              }
+              {pinAction?.action === 'singleDelete' ? (
+                 <span>To confirm this deletion, please enter the security PIN.</span>
+              ) : pinAction?.action === 'editRemarks' ? (
+                 <span>To edit remarks for <strong className="text-blue-600">{pinAction.log.studentName}</strong>, please enter the security PIN.</span>
+              ) : (
+                 <span>To confirm the deletion of <strong className="text-red-600">{bulkDeleteConfig.logs.length}</strong> log(s), please enter the security PIN.</span>
+              )}
             </p>
 
             <input 
@@ -876,7 +891,9 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
 
             <div className="flex justify-end space-x-4 pt-4">
                 <button onClick={handlePinModalClose} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold">Cancel</button>
-                <button onClick={handlePinConfirm} className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold">Confirm & Delete</button>
+                <button onClick={handlePinConfirm} className={`px-6 py-2 text-white rounded-lg font-semibold ${pinAction?.action === 'editRemarks' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'}`}>
+                    {pinAction?.action === 'editRemarks' ? 'Verify & Edit' : 'Confirm & Delete'}
+                </button>
             </div>
         </div>
     </Modal>

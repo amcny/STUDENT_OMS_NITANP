@@ -25,12 +25,19 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
     const [alert, setAlert] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const modalTopRef = useRef<HTMLDivElement>(null);
     
     useEffect(() => {
         setFormData(student);
         setFaceImage(student?.faceImage || null);
         setAlert(null);
     }, [student]);
+
+    useEffect(() => {
+        if (alert && modalTopRef.current) {
+            modalTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }, [alert]);
 
 
     if (!isOpen || !formData || !student) return null;
@@ -149,6 +156,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={`Edit Profile: ${student?.name}`}>
             <div className="max-h-[80vh] overflow-y-auto pr-4 -mr-4 pl-1">
+                <div ref={modalTopRef} className="w-full h-0" />
                 {alert && <div className="mb-4"><Alert message={alert.message} type={alert.type} onClose={() => setAlert(null)} /></div>}
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

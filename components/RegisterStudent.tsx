@@ -51,7 +51,6 @@ const RegisterStudent: React.FC = () => {
     }
   }, [formData.gender, formData.studentType]);
 
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     const uppercaseFields = ['name', 'rollNumber', 'registrationNumber', 'roomNumber'];

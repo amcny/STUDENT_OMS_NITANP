@@ -1,12 +1,15 @@
-import React, { useState, useContext, useMemo } from 'react';
+import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { VisitorPassRecord } from '../types';
 import Alert from './Alert';
 import ConfirmationModal from './ConfirmationModal';
 import GatePassPreviewModal from './GatePassPreviewModal';
+import Modal from './Modal';
 
 // Allow TypeScript to recognize the XLSX global variable from the script tag
 declare var XLSX: any;
+
+const SECURITY_PIN = '200405';
 
 const INITIAL_FORM_DATA = {
   name: '',
@@ -63,6 +66,19 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
     const [logToMarkOut, setLogToMarkOut] = useState<VisitorPassRecord | null>(null);
     const [logToDelete, setLogToDelete] = useState<VisitorPassRecord | null>(null);
     
+    // PIN Security State
+    const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+    const [pinInput, setPinInput] = useState('');
+    const [pinError, setPinError] = useState('');
+
+    const topRef = useRef<HTMLDivElement>(null);
+    
+    useEffect(() => {
+        if (notification && topRef.current) {
+            topRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, [notification]);
+
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         const uppercaseFields = ['name', 'relation', 'address', 'vehicleNumber', 'whomToMeet', 'placeToVisit', 'purpose'];
@@ -126,12 +142,39 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
         setVisitorLogs(prev => prev.map(log => log.id === logToMarkOut.id ? { ...log, outTime: new Date().toISOString(), outGateName: gate } : log));
         setLogToMarkOut(null);
     };
-
-    const handleDeleteLog = () => {
-        if (!logToDelete) return;
-        setVisitorLogs(prev => prev.filter(log => log.id !== logToDelete.id));
-        setLogToDelete(null);
+    
+    const handleProceedToPin = () => {
+        // Transition from confirmation modal to PIN modal
+        setIsPinModalOpen(true);
     };
+
+    const handlePinVerify = () => {
+        if (pinInput !== SECURITY_PIN) {
+            setPinError('Incorrect PIN. Please try again.');
+            setPinInput('');
+            return;
+        }
+        
+        // Proceed with deletion
+        if (logToDelete) {
+            setVisitorLogs(prev => prev.filter(log => log.id !== logToDelete.id));
+            setNotification({ message: `Visitor log for ${logToDelete.name} deleted successfully.`, type: 'success' });
+        }
+        
+        // Cleanup
+        setLogToDelete(null);
+        setIsPinModalOpen(false);
+        setPinInput('');
+        setPinError('');
+    };
+    
+    const handleClosePinModal = () => {
+        setIsPinModalOpen(false);
+        setLogToDelete(null); // Cancel deletion process
+        setPinInput('');
+        setPinError('');
+    };
+
 
     const sortedAndFilteredLogs = useMemo(() => {
         return visitorLogs
@@ -226,7 +269,7 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
 
     return (
         <div className="space-y-8">
-            <div className="bg-white p-8 rounded-lg shadow-xl max-w-screen-2xl mx-auto">
+            <div ref={topRef} className="bg-white p-8 rounded-lg shadow-xl max-w-screen-2xl mx-auto">
                 <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Create Visitor Gate Pass</h2>
                 {notification && <div className="mb-6"><Alert message={notification.message} type={notification.type} onClose={() => setNotification(null)} /></div>}
                 
@@ -322,7 +365,43 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
             <GatePassPreviewModal isOpen={!!passToPreview} onClose={() => setPassToPreview(null)} passData={passToPreview} />
 
             <ConfirmationModal isOpen={!!logToMarkOut} onClose={() => setLogToMarkOut(null)} onConfirm={handleConfirmMarkOut} title="Confirm Departure" message={<span>Are you sure you want to mark <strong>{logToMarkOut?.name}</strong> as departed?</span>} confirmButtonText="Confirm" confirmButtonClassName="bg-green-600 hover:bg-green-700" />
-            <ConfirmationModal isOpen={!!logToDelete} onClose={() => setLogToDelete(null)} onConfirm={handleDeleteLog} title="Delete Visitor Log" message={<span>Are you sure you want to delete the pass for <strong>{logToDelete?.name}</strong>? This action cannot be undone.</span>} />
+            
+            {/* Confirmation Modal for Deletion - Redirects to PIN Modal on Confirm */}
+            <ConfirmationModal 
+                isOpen={!!logToDelete && !isPinModalOpen} 
+                onClose={() => setLogToDelete(null)} 
+                onConfirm={handleProceedToPin} 
+                title="Delete Visitor Log" 
+                message={<span>Are you sure you want to delete the pass for <strong>{logToDelete?.name}</strong>? This action cannot be undone.</span>} 
+            />
+            
+            {/* PIN Security Modal for Deletion */}
+            <Modal isOpen={isPinModalOpen} onClose={handleClosePinModal} title="Security Verification" size="sm">
+                <div className="space-y-4">
+                    <p className="text-gray-700 text-center">
+                        To confirm deletion of this visitor log, please enter the security PIN.
+                    </p>
+
+                    <input 
+                        type="password"
+                        value={pinInput}
+                        onChange={(e) => { setPinInput(e.target.value); setPinError(''); }}
+                        className="w-full text-center tracking-widest text-2xl px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        maxLength={6}
+                        autoFocus
+                        onKeyDown={(e) => e.key === 'Enter' && handlePinVerify()}
+                    />
+
+                    {pinError && <p className="text-red-500 text-sm text-center">{pinError}</p>}
+
+                    <div className="flex justify-end space-x-4 pt-4">
+                        <button onClick={handleClosePinModal} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold">Cancel</button>
+                        <button onClick={handlePinVerify} className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold">
+                            Verify & Delete
+                        </button>
+                    </div>
+                </div>
+            </Modal>
 
         </div>
     );
