@@ -10,7 +10,7 @@ export interface Student {
   hostel: string; // Can be empty if studentType is 'Day-Scholar'
   roomNumber: string; // Can be empty if studentType is 'Day-Scholar'
   contactNumber: string;
-  faceImage: string | null; // base64 data URL
+  faceImage: string | null; // URL from Firebase Storage
   faceFeatures: number[] | null; // A vector representing facial features
 }
 

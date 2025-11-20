@@ -9,85 +9,106 @@ import VisitorGatePass from './components/VisitorGatePass';
 import Footer from './components/Footer';
 import Login from './components/Login';
 import { Student, OutingRecord, View, VisitorPassRecord } from './types';
-import useLocalStorage from './hooks/useLocalStorage';
-import { STUDENTS_STORAGE_KEY, OUTING_LOGS_STORAGE_key, VISITOR_LOGS_STORAGE_KEY } from './constants';
-import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+import { auth } from './firebase'; // Use the centralized instances
+import { onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+import { onStudentsUpdate, onOutingLogsUpdate, onVisitorLogsUpdate } from './services/firebaseService';
 
-// --- Firebase Initialization ---
-// Moved to module scope and exported to ensure a single instance is used across the app.
-const firebaseConfig = {
-  apiKey: "AIzaSyDYwa8CFx1eiGBpdfWP5OaFyD_Sq07Sh7Y",
-  authDomain: "somnitanp.firebaseapp.com",
-  projectId: "somnitanp",
-  storageBucket: "somnitanp.firebasestorage.app",
-  messagingSenderId: "1072085106820",
-  appId: "1:1072085106820:web:898f64557be5ebb0b702d1"
-};
+type UserRole = 'admin' | 'security';
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-// -----------------------------
-
+// The context now provides the data arrays and the user's role.
+// Components will use the firebaseService to modify data.
 interface AppContextType {
   students: Student[];
-  setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
   outingLogs: OutingRecord[];
-  setOutingLogs: React.Dispatch<React.SetStateAction<OutingRecord[]>>;
   visitorLogs: VisitorPassRecord[];
-  setVisitorLogs: React.Dispatch<React.SetStateAction<VisitorPassRecord[]>>;
+  role: UserRole | null;
 }
 
 export const AppContext = createContext<AppContextType>({
   students: [],
-  setStudents: () => {},
   outingLogs: [],
-  setOutingLogs: () => {},
   visitorLogs: [],
-  setVisitorLogs: () => {},
+  role: null,
 });
 
 interface AuthState {
     gate: string | null;
     isLoading: boolean;
+    role: UserRole | null;
 }
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
-  const [students, setStudents] = useLocalStorage<Student[]>(STUDENTS_STORAGE_KEY, []);
-  const [outingLogs, setOutingLogs] = useLocalStorage<OutingRecord[]>(OUTING_LOGS_STORAGE_key, []);
-  const [visitorLogs, setVisitorLogs] = useLocalStorage<VisitorPassRecord[]>(VISITOR_LOGS_STORAGE_KEY, []);
-  const [authState, setAuthState] = useState<AuthState>({ gate: null, isLoading: true });
+  const [students, setStudents] = useState<Student[]>([]);
+  const [outingLogs, setOutingLogs] = useState<OutingRecord[]>([]);
+  const [visitorLogs, setVisitorLogs] = useState<VisitorPassRecord[]>([]);
+  const [authState, setAuthState] = useState<AuthState>({ gate: null, isLoading: true, role: null });
   const [isKioskOnlyMode, setIsKioskOnlyMode] = useState(false);
 
   useEffect(() => {
+    // Check for Kiosk mode once on initial load.
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('view') === 'kiosk') {
       setIsKioskOnlyMode(true);
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (user: FirebaseUser | null) => {
-        if (user && user.email) {
-            const emailPrefix = user.email.split('@')[0].toLowerCase();
-            let gateName: string;
-            if (emailPrefix === 'frontgate') {
+    // Main effect to handle authentication state and subsequent data fetching.
+    const unsubscribeAuth = onAuthStateChanged(auth, (user: FirebaseUser | null) => {
+      let dataUnsubscribers: (() => void)[] = [];
+      
+      if (user && user.email) {
+        // --- USER IS LOGGED IN ---
+        const email = user.email.toLowerCase();
+        let gateName: string;
+        let role: UserRole;
+
+        if (email === 'admin.som@nitandhra.ac.in') {
+            role = 'admin';
+            gateName = 'Admin';
+        } else {
+            role = 'security';
+            if (email === 'frontgate.som@nitandhra.ac.in') {
                 gateName = 'Front Gate';
-            } else if (emailPrefix === 'backgate') {
+            } else if (email === 'backgate.som@nitandhra.ac.in') {
                 gateName = 'Back Gate';
             } else {
-                // Handle any other authenticated user by creating a display name.
-                // This prevents getting stuck on the login page for valid users
-                // that aren't the main gate accounts.
+                const emailPrefix = email.split('@')[0];
                 gateName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
             }
-            setAuthState({ gate: gateName, isLoading: false });
-        } else {
-            setAuthState({ gate: null, isLoading: false });
         }
+        
+        // Set auth state now that we have a user.
+        setAuthState({ gate: gateName, isLoading: false, role });
+
+        // **CRITICAL FIX**: Only set up data listeners AFTER authentication is confirmed.
+        const unsubscribeStudents = onStudentsUpdate(setStudents);
+        const unsubscribeOutingLogs = onOutingLogsUpdate(setOutingLogs);
+        const unsubscribeVisitorLogs = onVisitorLogsUpdate(setVisitorLogs);
+        
+        dataUnsubscribers = [unsubscribeStudents, unsubscribeOutingLogs, unsubscribeVisitorLogs];
+
+      } else {
+        // --- USER IS LOGGED OUT ---
+        setAuthState({ gate: null, isLoading: false, role: null });
+        // Clear all data to prevent showing stale info on next login.
+        setStudents([]);
+        setOutingLogs([]);
+        setVisitorLogs([]);
+      }
+      
+      // The onAuthStateChanged listener can return a cleanup function.
+      // This will be called when the auth state changes again (e.g., user logs out).
+      return () => {
+        dataUnsubscribers.forEach(unsub => unsub());
+      };
     });
 
-    return () => unsubscribe();
-  }, []);
+    // Cleanup function for when the App component unmounts.
+    return () => {
+      unsubscribeAuth();
+    };
+  }, []); // Empty dependency array ensures this effect runs only once on mount.
+
 
   const handleLogout = async () => {
     try {
@@ -129,8 +150,8 @@ const App: React.FC = () => {
   if (!authState.gate) {
     return <Login />;
   }
-
-  const appContextValue = { students, setStudents, outingLogs, setOutingLogs, visitorLogs, setVisitorLogs };
+  
+  const appContextValue = { students, outingLogs, visitorLogs, role: authState.role };
 
   if (isKioskOnlyMode) {
     return (

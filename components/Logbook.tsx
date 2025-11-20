@@ -1,7 +1,7 @@
-
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { OutingRecord, Student, OutingType } from '../types';
+import * as firebaseService from '../services/firebaseService';
 import StudentProfileModal from './StudentProfileModal';
 import RemarksModal from './RemarksModal';
 import ViewRemarksModal from './ViewRemarksModal';
@@ -47,7 +47,7 @@ interface LogbookProps {
 }
 
 const Logbook: React.FC<LogbookProps> = ({ gate }) => {
-  const { outingLogs, students, setOutingLogs } = useContext(AppContext);
+  const { outingLogs, students, role } = useContext(AppContext);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'overdue'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -105,26 +105,20 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
   const overdueLogs = useMemo(() => {
     const now = new Date();
     return outingLogs.filter(log => {
-        // Not overdue if they've checked in or if the status has been manually resolved
         if (log.checkInTime !== null || log.overdueResolved) return false;
-
         const checkOutDate = new Date(log.checkOutTime);
         let deadline: Date;
         if (log.outingType === OutingType.LOCAL) {
-            // Deadline is 9 PM on the day of checkout
             deadline = new Date(checkOutDate.getFullYear(), checkOutDate.getMonth(), checkOutDate.getDate(), 21, 0, 0);
         } else {
-             // Deadline is 72 hours after checkout
             deadline = new Date(checkOutDate.getTime() + OVERDUE_HOURS_NON_LOCAL * 60 * 60 * 1000);
         }
         return now > deadline;
     });
   }, [outingLogs]);
 
-  // Effect to calculate logs for bulk deletion when modal opens or range changes
   useEffect(() => {
       if (!isBulkDeleteModalOpen) return;
-
       const now = new Date();
       const getCutoffDate = (range: string): Date | null => {
           const cutoff = new Date(now);
@@ -132,24 +126,19 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
               case '3m': cutoff.setMonth(now.getMonth() - 3); return cutoff;
               case '6m': cutoff.setMonth(now.getMonth() - 6); return cutoff;
               case '1y': cutoff.setFullYear(now.getFullYear() - 1); return cutoff;
-              case 'all': return null; // A null cutoff means delete all
-              default: return new Date(); // Should not happen
+              case 'all': return null;
+              default: return new Date();
           }
       };
-
       const cutoffDate = getCutoffDate(bulkDeleteConfig.range);
-      
-      const logsToPurge = cutoffDate === null
-          ? outingLogs
-          : outingLogs.filter(log => new Date(log.checkOutTime) < cutoffDate);
-
+      const logsToPurge = cutoffDate === null ? outingLogs : outingLogs.filter(log => new Date(log.checkOutTime) < cutoffDate);
       setBulkDeleteConfig(prev => ({ ...prev, logs: logsToPurge, hasExported: false }));
   }, [isBulkDeleteModalOpen, bulkDeleteConfig.range, outingLogs]);
 
   const handleManualSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const term = e.target.value;
     setManualSearchTerm(term);
-    setSelectedStudentForManualEntry(null); // Clear selection when user types again
+    setSelectedStudentForManualEntry(null);
 
     if (term.length > 1) {
         const lowerTerm = term.toLowerCase();
@@ -157,7 +146,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             student.rollNumber.toLowerCase().includes(lowerTerm) || 
             student.registrationNumber.toLowerCase().includes(lowerTerm) ||
             student.name.toLowerCase().includes(lowerTerm)
-        ).slice(0, 5); // Limit to 5 suggestions
+        ).slice(0, 5);
         setSuggestions(filteredStudents);
         setShowSuggestions(true);
     } else {
@@ -195,67 +184,48 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     }
   };
 
-  const handleSaveRemarks = (logId: string, remarks: string) => {
-    setOutingLogs(prevLogs =>
-      prevLogs.map(log =>
-        log.id === logId ? { ...log, remarks } : log
-      )
-    );
+  const handleSaveRemarks = async (logId: string, remarks: string) => {
+    await firebaseService.updateOutingLog(logId, { remarks });
   };
   
-  const handleConfirmStatusToggle = () => {
+  const handleConfirmStatusToggle = async () => {
     if (!logToToggleStatus) return;
-    setOutingLogs(prevLogs =>
-        prevLogs.map(log => {
-            if (log.id === logToToggleStatus.id) {
-                const isReverting = !!log.checkInTime;
-                if (isReverting) {
-                    // Reverting to 'Out'
-                    const newRemark = `Check-in reverted by ${gate} on ${new Date().toLocaleString()}`;
-                    return {
-                        ...log,
-                        checkInTime: null,
-                        checkInGate: null,
-                        remarks: log.remarks ? `${log.remarks}; ${newRemark}` : newRemark,
-                    };
-                } else {
-                    // Manual Check-In from actions column
-                    const newRemark = `Manual Check-In by ${gate} on ${new Date().toLocaleString()}`;
-                     return {
-                        ...log,
-                        checkInTime: new Date().toISOString(),
-                        checkInGate: gate, 
-                        remarks: log.remarks ? `${log.remarks}; ${newRemark}` : newRemark,
-                    };
-                }
-            }
-            return log;
-        })
-    );
+    
+    const isReverting = !!logToToggleStatus.checkInTime;
+    let updateData: Partial<OutingRecord>;
+    
+    if (isReverting) {
+        const newRemark = `Check-in reverted by ${gate} on ${new Date().toLocaleString()}`;
+        updateData = {
+            checkInTime: null,
+            checkInGate: null,
+            remarks: logToToggleStatus.remarks ? `${logToToggleStatus.remarks}; ${newRemark}` : newRemark,
+        };
+    } else {
+        const newRemark = `Manual Check-In by ${gate} on ${new Date().toLocaleString()}`;
+        updateData = {
+            checkInTime: new Date().toISOString(),
+            checkInGate: gate, 
+            remarks: logToToggleStatus.remarks ? `${logToToggleStatus.remarks}; ${newRemark}` : newRemark,
+        };
+    }
+    
+    await firebaseService.updateOutingLog(logToToggleStatus.id, updateData);
     setLogToToggleStatus(null);
   };
 
-  const handleConfirmResolveOverdue = () => {
+  const handleConfirmResolveOverdue = async () => {
     if (!logToResolve) return;
-
-    setOutingLogs(prevLogs => {
-      return prevLogs.map(log => {
-        if (log.id === logToResolve.id) {
-          const newRemark = `Overdue status resolved by ${gate} on ${new Date().toLocaleString()}.`;
-          return {
-            ...log,
-            overdueResolved: true,
-            remarks: log.remarks ? `${log.remarks}; ${newRemark}` : newRemark,
-          };
-        }
-        return log;
-      });
-    });
-
+    const newRemark = `Overdue status resolved by ${gate} on ${new Date().toLocaleString()}.`;
+    const updatedData = {
+      overdueResolved: true,
+      remarks: logToResolve.remarks ? `${logToResolve.remarks}; ${newRemark}` : newRemark,
+    };
+    await firebaseService.updateOutingLog(logToResolve.id, updatedData);
     setLogToResolve(null);
   };
 
-  const handleManualEntry = (action: 'check-out' | 'check-in') => {
+  const handleManualEntry = async (action: 'check-out' | 'check-in') => {
     setManualEntryAlert(null);
     if (!selectedStudentForManualEntry) {
         setManualEntryAlert({ message: "Please search for and select a student first.", type: 'error'});
@@ -271,8 +241,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             return;
         }
 
-        const newLog: OutingRecord = {
-            id: crypto.randomUUID(),
+        const newLog: Omit<OutingRecord, 'id'> = {
             studentId: student.id,
             studentName: student.name,
             rollNumber: student.rollNumber,
@@ -286,17 +255,17 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             checkInGate: null,
             remarks: `Manual Check-Out by ${gate} on ${new Date().toLocaleString()}`
         };
-        setOutingLogs(prev => [newLog, ...prev]);
+        await firebaseService.addOutingLog(newLog);
         setManualEntryAlert({ message: `${student.name} checked out successfully.`, type: 'success'});
 
     } else { // Check-in
-        const activeLogIndex = outingLogs.findIndex(log => 
+        const activeLog = outingLogs.find(log => 
             log.studentId === student.id && 
             log.checkInTime === null &&
             log.outingType === manualOutingType
         );
 
-        if (activeLogIndex === -1) {
+        if (!activeLog) {
             const otherActiveOuting = outingLogs.find(log => log.studentId === student.id && log.checkInTime === null);
             if (otherActiveOuting) {
                  setManualEntryAlert({ message: `${student.name} has an active '${otherActiveOuting.outingType}' outing. Please select the correct outing type to check them in.`, type: 'error' });
@@ -306,10 +275,13 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             return;
         }
 
-        const updatedLogs = [...outingLogs];
         const newRemark = `Manual Check-In by ${gate} on ${new Date().toLocaleString()}`;
-        updatedLogs[activeLogIndex] = { ...updatedLogs[activeLogIndex], checkInTime: new Date().toISOString(), checkInGate: gate, remarks: updatedLogs[activeLogIndex].remarks ? `${updatedLogs[activeLogIndex].remarks}; ${newRemark}` : newRemark };
-        setOutingLogs(updatedLogs);
+        const updateData = {
+            checkInTime: new Date().toISOString(),
+            checkInGate: gate,
+            remarks: activeLog.remarks ? `${activeLog.remarks}; ${newRemark}` : newRemark
+        };
+        await firebaseService.updateOutingLog(activeLog.id, updateData);
         setManualEntryAlert({ message: `${student.name} checked in successfully.`, type: 'success'});
     }
     setSelectedStudentForManualEntry(null);
@@ -341,28 +313,29 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
           );
       });
 
-    filtered.sort((a, b) => {
+    return filtered.sort((a, b) => {
         const key = sortConfig.key;
-        let valA: string | number | null = a[key];
-        let valB: string | number | null = b[key];
+        let valA: any = a[key as keyof OutingRecord];
+        let valB: any = b[key as keyof OutingRecord];
 
-        if (key === 'checkInTime' || key === 'checkInGate') {
+        // Ensure consistent type for comparison
+        if (key === 'checkOutTime' || key === 'checkInTime') {
             if (valA === null && valB !== null) return sortConfig.direction === 'ascending' ? 1 : -1;
             if (valA !== null && valB === null) return sortConfig.direction === 'ascending' ? -1 : 1;
             if (valA === null && valB === null) return 0;
-        }
-
-        if (key === 'checkOutTime' || key === 'checkInTime') {
             valA = new Date(valA as string).getTime();
             valB = new Date(valB as string).getTime();
+        } else {
+            // FIX: Coerce values to strings for safe comparison to handle various data types.
+            valA = String(valA ?? '');
+            valB = String(valB ?? '');
         }
 
-        if (valA! < valB!) return sortConfig.direction === 'ascending' ? -1 : 1;
-        if (valA! > valB!) return sortConfig.direction === 'ascending' ? 1 : -1;
+        if (valA < valB) return sortConfig.direction === 'ascending' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'ascending' ? 1 : -1;
         return 0;
     });
 
-    return filtered;
   }, [outingLogs, filter, searchTerm, sortConfig, studentMap, overdueLogs]);
 
   const exportLogs = (logsToExport: OutingRecord[], fileName: string) => {
@@ -419,7 +392,6 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     exportLogs(sortedAndFilteredLogs, "Student_Outing_Logbook.xlsx");
   };
 
-  // Bulk Delete Handlers
   const handleExportForDeletion = () => {
     const success = exportLogs(
         bulkDeleteConfig.logs,
@@ -437,7 +409,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     setPinInput('');
   };
   
-  const handlePinConfirm = () => {
+  const handlePinConfirm = async () => {
     if (pinInput !== SECURITY_PIN) {
         setPinError('Incorrect PIN. Please try again.');
         setPinInput('');
@@ -445,25 +417,24 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     }
     
     if (!pinAction) return;
-
+    
     let deletedCount = 0;
-
-    if (pinAction.action === 'singleDelete') {
-        const logId = pinAction.log.id;
-        setOutingLogs(prev => prev.filter(log => log.id !== logId));
-        deletedCount = 1;
-    } else if (pinAction.action === 'bulkDelete') {
-        const idsToDelete = new Set(bulkDeleteConfig.logs.map(log => log.id));
-        setOutingLogs(prev => prev.filter(log => !idsToDelete.has(log.id)));
-        deletedCount = idsToDelete.size;
-        setBulkDeleteConfig({ range: '3m', logs: [], hasExported: false });
-    } else if (pinAction.action === 'editRemarks') {
-         setLogToEditRemarks(pinAction.log);
-         // No deletion message for edit
-         setPinAction(null);
-         setPinInput('');
-         setPinError('');
-         return;
+    try {
+        if (pinAction.action === 'singleDelete') {
+            await firebaseService.deleteOutingLog(pinAction.log.id);
+            deletedCount = 1;
+        } else if (pinAction.action === 'bulkDelete') {
+            const idsToDelete = bulkDeleteConfig.logs.map(log => log.id);
+            await firebaseService.deleteOutingLogsBatch(idsToDelete);
+            deletedCount = idsToDelete.length;
+            setBulkDeleteConfig({ range: '3m', logs: [], hasExported: false });
+        } else if (pinAction.action === 'editRemarks') {
+             setLogToEditRemarks(pinAction.log);
+             setPinAction(null); setPinInput(''); setPinError('');
+             return;
+        }
+    } catch (error) {
+        console.error("Deletion failed:", error);
     }
   
     setManualEntryAlert({
@@ -471,7 +442,6 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         type: 'success',
     });
   
-    // Reset PIN state
     setPinAction(null);
     setPinInput('');
     setPinError('');
@@ -596,6 +566,36 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             </div>
         </div>
 
+        <div className="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
+            <div className="flex flex-wrap gap-2">
+                <button onClick={() => setFilter('all')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}>All Logs ({outingLogs.length})</button>
+                <button onClick={() => setFilter('active')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'active' ? 'bg-yellow-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Active ({outingLogs.filter(l => !l.checkInTime).length})</button>
+                <button onClick={() => setFilter('completed')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'completed' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Completed</button>
+                <button onClick={() => setFilter('overdue')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'overdue' ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Overdue ({overdueLogs.length})</button>
+            </div>
+            <div className="flex items-center space-x-4 w-full md:w-auto">
+                <input type="text" placeholder="Search Logs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-80 px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 bg-gray-100" />
+                <button
+                    onClick={handleExportToExcel}
+                    className="flex-shrink-0 flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors"
+                    title="Export current view to Excel"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 9.293a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                    <span>Export</span>
+                </button>
+                {role === 'admin' && (
+                    <button
+                        onClick={() => setIsBulkDeleteModalOpen(true)}
+                        className="flex-shrink-0 flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
+                        title="Bulk delete old logs"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
+                        <span>Bulk Delete</span>
+                    </button>
+                )}
+            </div>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="min-w-full bg-white border border-gray-200">
             <thead className="bg-gray-100">
@@ -672,12 +672,16 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                                     </button>
                                 )}
-                                <button onClick={() => setPinAction({ action: 'editRemarks', log })} className="text-gray-500 hover:text-indigo-600 transition-colors" title="Edit Remarks">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" /></svg>
-                                </button>
-                                <button onClick={() => setPinAction({ action: 'singleDelete', log })} className="text-gray-500 hover:text-red-600 transition-colors" title="Delete Log">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
-                                </button>
+                                {role === 'admin' && (
+                                    <>
+                                        <button onClick={() => setPinAction({ action: 'editRemarks', log })} className="text-gray-500 hover:text-indigo-600 transition-colors" title="Edit Remarks">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" /></svg>
+                                        </button>
+                                        <button onClick={() => setPinAction({ action: 'singleDelete', log })} className="text-gray-500 hover:text-red-600 transition-colors" title="Delete Log">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </td>
                     </tr>
@@ -747,10 +751,8 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         confirmButtonClassName="bg-green-600 hover:bg-green-700"
       />
 
-    {/* Bulk Delete Modals */}
     <Modal isOpen={isBulkDeleteModalOpen} onClose={() => setIsBulkDeleteModalOpen(false)} title="Bulk Log Deletion">
       <div className="space-y-6">
-          {/* Step 1: Range Selection */}
           <div>
               <div className="flex items-center space-x-3 mb-3">
                   <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white font-bold rounded-full text-lg">1</span>
@@ -767,7 +769,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                                   value={range}
                                   checked={bulkDeleteConfig.range === range}
                                   onChange={() => setBulkDeleteConfig(prev => ({ ...prev, range }))}
-                                  className="sr-only" // Hide the default radio button
+                                  className="sr-only"
                               />
                               <span className="font-semibold text-gray-800">{descriptions[range]}</span>
                           </label>
@@ -785,8 +787,6 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                 </div>
               </div>
           </div>
-
-          {/* Step 2: Export */}
           <div>
               <div className="flex items-center space-x-3 mb-3">
                   <span className={`flex items-center justify-center w-8 h-8 font-bold rounded-full text-lg ${bulkDeleteConfig.logs.length > 0 ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>2</span>
@@ -814,8 +814,6 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                   <span>Export {bulkDeleteConfig.logs.length} Records</span>
               </button>
           </div>
-
-          {/* Step 3: Delete */}
           <div>
               <div className="flex items-center space-x-3 mb-3">
                   <span className={`flex items-center justify-center w-8 h-8 font-bold rounded-full text-lg ${bulkDeleteConfig.hasExported ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>3</span>
@@ -847,7 +845,6 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                  <span>To confirm the deletion of <strong className="text-red-600">{bulkDeleteConfig.logs.length}</strong> log(s), please enter the security PIN.</span>
               )}
             </p>
-
             <input 
                 type="password"
                 value={pinInput}
@@ -857,9 +854,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
                 autoFocus
                 onKeyDown={(e) => e.key === 'Enter' && handlePinConfirm()}
             />
-
             {pinError && <p className="text-red-500 text-sm text-center">{pinError}</p>}
-
             <div className="flex justify-end space-x-4 pt-4">
                 <button onClick={handlePinModalClose} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold">Cancel</button>
                 <button onClick={handlePinConfirm} className={`px-6 py-2 text-white rounded-lg font-semibold ${pinAction?.action === 'editRemarks' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'}`}>

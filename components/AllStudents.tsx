@@ -5,6 +5,7 @@ import StudentProfileModal from './StudentProfileModal';
 import EditStudentModal from './EditStudentModal';
 import ConfirmationModal from './ConfirmationModal';
 import CustomSelect from './CustomSelect';
+import * as firebaseService from '../services/firebaseService';
 import { BRANCH_OPTIONS, YEAR_OPTIONS, GENDER_OPTIONS, STUDENT_TYPE_OPTIONS } from '../constants';
 import Modal from './Modal';
 
@@ -15,7 +16,7 @@ interface AllStudentsProps {
 }
 
 const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
-  const { students, setStudents } = useContext(AppContext);
+  const { students, role } = useContext(AppContext);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     year: 'All',
@@ -26,16 +27,11 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
   });
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [studentToEdit, setStudentToEdit] = useState<Student | null>(null);
-  const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   
-  // State for multi-step bulk delete
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
-  
-  // State for bulk select mode
   const [isBulkSelectMode, setIsBulkSelectMode] = useState(false);
 
-  // Unified PIN state management
   const [pinAction, setPinAction] = useState<{ action: 'singleDelete'; student: Student } | { action: 'bulkDelete' } | null>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
@@ -61,24 +57,29 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
     setSearchTerm('');
   };
 
-
-  const handleUpdateStudent = (updatedStudent: Student) => {
-    setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
+  const handleUpdateStudent = async (updatedStudent: Student, newPhotoBase64?: string | null) => {
+    await firebaseService.updateStudent(updatedStudent.id, updatedStudent, newPhotoBase64);
   };
   
-  const handlePinConfirm = () => {
+  const handlePinConfirm = async () => {
     if (pinInput !== SECURITY_PIN) {
         setPinError('Incorrect PIN. Please try again.');
         setPinInput('');
         return;
     }
 
-    if (pinAction?.action === 'singleDelete') {
-        setStudents(prev => prev.filter(s => s.id !== pinAction.student.id));
-    } else if (pinAction?.action === 'bulkDelete') {
-        setStudents(prev => prev.filter(s => !selectedStudentIds.has(s.id)));
-        setSelectedStudentIds(new Set());
-        setIsBulkSelectMode(false); // Exit bulk select mode after deletion
+    try {
+        if (pinAction?.action === 'singleDelete') {
+            await firebaseService.deleteStudent(pinAction.student);
+        } else if (pinAction?.action === 'bulkDelete') {
+            const studentsToDelete = students.filter(s => selectedStudentIds.has(s.id));
+            await firebaseService.deleteStudentsBatch(studentsToDelete);
+            setSelectedStudentIds(new Set());
+            setIsBulkSelectMode(false);
+        }
+    } catch (error) {
+        console.error("Deletion failed:", error);
+        // Optionally show an alert to the user
     }
 
     setPinAction(null);
@@ -228,15 +229,17 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
                         </button>
                     </>
                 ) : (
-                    <button
-                        onClick={() => setIsBulkSelectMode(true)}
-                        className="flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                        </svg>
-                        <span>Bulk Select</span>
-                    </button>
+                    role === 'admin' && (
+                        <button
+                            onClick={() => setIsBulkSelectMode(true)}
+                            className="flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                            </svg>
+                            <span>Bulk Select</span>
+                        </button>
+                    )
                 )}
             </div>
         </div>
@@ -263,7 +266,9 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Branch</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Year</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Contact</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Actions</th>
+                {role === 'admin' && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -311,16 +316,18 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.branch}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.year}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.contactNumber}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex items-center space-x-4">
-                      <button onClick={() => setStudentToEdit(student)} className="text-gray-500 hover:text-indigo-600 transition-colors" title="Edit Student">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" /></svg>
-                      </button>
-                      <button onClick={() => setPinAction({ action: 'singleDelete', student })} className="text-gray-500 hover:text-red-600 transition-colors" title="Delete Student">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
-                      </button>
-                    </div>
-                  </td>
+                  {role === 'admin' && (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex items-center space-x-4">
+                        <button onClick={() => setStudentToEdit(student)} className="text-gray-500 hover:text-indigo-600 transition-colors" title="Edit Student">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" /></svg>
+                        </button>
+                        <button onClick={() => setPinAction({ action: 'singleDelete', student })} className="text-gray-500 hover:text-red-600 transition-colors" title="Delete Student">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
+                        </button>
+                        </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

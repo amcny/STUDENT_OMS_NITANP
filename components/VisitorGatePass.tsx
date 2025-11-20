@@ -1,6 +1,7 @@
 import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { VisitorPassRecord } from '../types';
+import * as firebaseService from '../services/firebaseService';
 import Alert from './Alert';
 import ConfirmationModal from './ConfirmationModal';
 import GatePassPreviewModal from './GatePassPreviewModal';
@@ -51,22 +52,19 @@ interface VisitorGatePassProps {
 }
 
 const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
-    const { visitorLogs, setVisitorLogs } = useContext(AppContext);
+    const { visitorLogs } = useContext(AppContext);
     const [formData, setFormData] = useState(INITIAL_FORM_DATA);
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    // Logbook states
     const [filter, setFilter] = useState<'all' | 'inside' | 'departed'>('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'inTime', direction: 'descending' });
     
-    // Modal states
     const [passToPreview, setPassToPreview] = useState<VisitorPassRecord | null>(null);
     const [logToMarkOut, setLogToMarkOut] = useState<VisitorPassRecord | null>(null);
     const [logToDelete, setLogToDelete] = useState<VisitorPassRecord | null>(null);
     
-    // PIN Security State
     const [isPinModalOpen, setIsPinModalOpen] = useState(false);
     const [pinInput, setPinInput] = useState('');
     const [pinError, setPinError] = useState('');
@@ -94,15 +92,14 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
         return `V${dateStr}-${nextId}`;
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
         setNotification(null);
 
         try {
             const now = new Date();
-            const newPass: VisitorPassRecord = {
-                id: crypto.randomUUID(),
+            const newPassData = {
                 passNumber: generatePassNumber(),
                 date: now.toISOString().slice(0, 10),
                 inTime: now.toISOString(),
@@ -111,11 +108,17 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                 outGateName: null,
                 ...formData,
             };
+            await firebaseService.addVisitorLog(newPassData);
+            
+            // The listener will add it to the state, but we need the pass to preview it.
+            // A small delay to allow the listener to potentially update the state with the ID.
+            setTimeout(() => {
+                const createdPass = visitorLogs.find(log => log.passNumber === newPassData.passNumber);
+                setPassToPreview(createdPass || {id: 'preview', ...newPassData});
+            }, 500);
 
-            setVisitorLogs(prev => [newPass, ...prev]);
             setNotification({ message: 'Visitor pass generated successfully!', type: 'success' });
             setFormData(INITIAL_FORM_DATA);
-            setPassToPreview(newPass); // Open preview modal
         } catch (error) {
             console.error("Error generating pass:", error);
             setNotification({ message: 'Failed to generate pass. Please try again.', type: 'error' });
@@ -137,31 +140,28 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
         setSortConfig({ key, direction });
     };
 
-    const handleConfirmMarkOut = () => {
+    const handleConfirmMarkOut = async () => {
         if (!logToMarkOut) return;
-        setVisitorLogs(prev => prev.map(log => log.id === logToMarkOut.id ? { ...log, outTime: new Date().toISOString(), outGateName: gate } : log));
+        await firebaseService.updateVisitorLog(logToMarkOut.id, { outTime: new Date().toISOString(), outGateName: gate });
         setLogToMarkOut(null);
     };
     
     const handleProceedToPin = () => {
-        // Transition from confirmation modal to PIN modal
         setIsPinModalOpen(true);
     };
 
-    const handlePinVerify = () => {
+    const handlePinVerify = async () => {
         if (pinInput !== SECURITY_PIN) {
             setPinError('Incorrect PIN. Please try again.');
             setPinInput('');
             return;
         }
         
-        // Proceed with deletion
         if (logToDelete) {
-            setVisitorLogs(prev => prev.filter(log => log.id !== logToDelete.id));
+            await firebaseService.deleteVisitorLog(logToDelete.id);
             setNotification({ message: `Visitor log for ${logToDelete.name} deleted successfully.`, type: 'success' });
         }
         
-        // Cleanup
         setLogToDelete(null);
         setIsPinModalOpen(false);
         setPinInput('');
@@ -170,7 +170,7 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
     
     const handleClosePinModal = () => {
         setIsPinModalOpen(false);
-        setLogToDelete(null); // Cancel deletion process
+        setLogToDelete(null);
         setPinInput('');
         setPinError('');
     };
@@ -192,7 +192,6 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
             let valA = a[key as keyof VisitorPassRecord];
             let valB = b[key as keyof VisitorPassRecord];
             
-            // Handle nulls for sortable fields that can be null
             if (key === 'outTime' || key === 'outGateName') {
                 const directionMultiplier = sortConfig.direction === 'ascending' ? 1 : -1;
                 if (valA === null && valB !== null) return 1 * directionMultiplier;
@@ -201,17 +200,15 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
             }
 
             if (key === 'inTime' || key === 'outTime') {
-                // Fix: Use separate numeric variables for date comparison to avoid type errors.
-                const timeA = new Date(valA as string).getTime();
-                const timeB = new Date(valB as string).getTime();
-
+                const timeA = valA ? new Date(valA as string).getTime() : 0;
+                const timeB = valB ? new Date(valB as string).getTime() : 0;
                 if (timeA < timeB) return sortConfig.direction === 'ascending' ? -1 : 1;
                 if (timeA > timeB) return sortConfig.direction === 'ascending' ? 1 : -1;
                 return 0;
             }
 
-            if (valA! < valB!) return sortConfig.direction === 'ascending' ? -1 : 1;
-            if (valA! > valB!) return sortConfig.direction === 'ascending' ? 1 : -1;
+            if (String(valA) < String(valB)) return sortConfig.direction === 'ascending' ? -1 : 1;
+            if (String(valA) > String(valB)) return sortConfig.direction === 'ascending' ? 1 : -1;
             return 0;
           });
     }, [visitorLogs, filter, searchTerm, sortConfig]);
@@ -366,7 +363,6 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
 
             <ConfirmationModal isOpen={!!logToMarkOut} onClose={() => setLogToMarkOut(null)} onConfirm={handleConfirmMarkOut} title="Confirm Departure" message={<span>Are you sure you want to mark <strong>{logToMarkOut?.name}</strong> as departed?</span>} confirmButtonText="Confirm" confirmButtonClassName="bg-green-600 hover:bg-green-700" />
             
-            {/* Confirmation Modal for Deletion - Redirects to PIN Modal on Confirm */}
             <ConfirmationModal 
                 isOpen={!!logToDelete && !isPinModalOpen} 
                 onClose={() => setLogToDelete(null)} 
@@ -375,13 +371,11 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                 message={<span>Are you sure you want to delete the pass for <strong>{logToDelete?.name}</strong>? This action cannot be undone.</span>} 
             />
             
-            {/* PIN Security Modal for Deletion */}
             <Modal isOpen={isPinModalOpen} onClose={handleClosePinModal} title="Security Verification" size="sm">
                 <div className="space-y-4">
                     <p className="text-gray-700 text-center">
                         To confirm deletion of this visitor log, please enter the security PIN.
                     </p>
-
                     <input 
                         type="password"
                         value={pinInput}
@@ -391,9 +385,7 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                         autoFocus
                         onKeyDown={(e) => e.key === 'Enter' && handlePinVerify()}
                     />
-
                     {pinError && <p className="text-red-500 text-sm text-center">{pinError}</p>}
-
                     <div className="flex justify-end space-x-4 pt-4">
                         <button onClick={handleClosePinModal} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold">Cancel</button>
                         <button onClick={handlePinVerify} className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold">

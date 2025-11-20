@@ -14,12 +14,12 @@ interface EditStudentModalProps {
     isOpen: boolean;
     onClose: () => void;
     student: Student | null;
-    onSave: (updatedStudent: Student) => void;
+    onSave: (updatedStudent: Student, newPhotoBase64?: string | null) => void;
     allStudents: Student[];
 }
 
 const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, student, onSave, allStudents }) => {
-    const [formData, setFormData] = useState(student);
+    const [formData, setFormData] = useState<Student | null>(student);
     const [faceImage, setFaceImage] = useState<string | null>(student?.faceImage || null);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
     const [alert, setAlert] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -94,28 +94,19 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
             };
             reader.readAsDataURL(file);
         }
-        // Reset file input to allow selecting the same file again
         e.target.value = '';
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setAlert(null);
-        if (!faceImage) {
-            setAlert({ message: 'A face image is required.', type: 'error' });
-            return;
-        }
-
+        
         const otherStudents = allStudents.filter(s => s.id !== student.id);
-        const existingRollNumbers = otherStudents.map(s => s.rollNumber);
-        const existingRegistrationNumbers = otherStudents.map(s => s.registrationNumber);
-
-        if (existingRollNumbers.includes(formData.rollNumber)) {
+        if (otherStudents.some(s => s.rollNumber === formData.rollNumber)) {
             setAlert({ message: 'Another student with this Roll Number already exists.', type: 'error' });
             return;
         }
-
-        if (existingRegistrationNumbers.includes(formData.registrationNumber)) {
+        if (otherStudents.some(s => s.registrationNumber === formData.registrationNumber)) {
             setAlert({ message: 'Another student with this Registration Number already exists.', type: 'error' });
             return;
         }
@@ -124,27 +115,30 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
         
         try {
             let features = formData.faceFeatures;
-            // Only re-extract features if the image has actually changed
-            if (faceImage !== formData.faceImage) {
+            let newPhotoBase64: string | null = null;
+            
+            // A new base64 string indicates a new image was captured/uploaded
+            if (faceImage && faceImage.startsWith('data:image')) {
                 setAlert({ message: 'New image detected. Re-analyzing face...', type: 'info' });
                 features = await extractFaceFeatures(faceImage);
+                newPhotoBase64 = faceImage;
             }
             
             const updatedStudent: Student = {
                 ...formData,
-                faceImage,
+                faceImage: faceImage, // This will be the old URL or the new base64
                 faceFeatures: features,
             };
 
-            onSave(updatedStudent);
+            onSave(updatedStudent, newPhotoBase64);
             setAlert({ message: 'Student details saved successfully!', type: 'success' });
             setTimeout(() => {
                 onClose();
             }, 1500);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to process update:", error);
-            setAlert({ message: 'Could not process the request. Please try again.', type: 'error' });
+            setAlert({ message: error.message || 'Could not process the request. Please try again.', type: 'error' });
         } finally {
             setIsSaving(false);
         }

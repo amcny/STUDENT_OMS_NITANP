@@ -1,6 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { OutingType, OutingRecord, Student } from '../types';
 import { AppContext } from '../App';
+import * as firebaseService from '../services/firebaseService';
 import Modal from './Modal';
 import CameraCapture from './CameraCapture';
 import { findBestMatch } from '../services/facialRecognitionService';
@@ -15,7 +16,7 @@ interface OutingKioskProps {
 }
 
 const OutingKiosk: React.FC<OutingKioskProps> = ({ gate }) => {
-  const { students, outingLogs, setOutingLogs } = useContext(AppContext);
+  const { students, outingLogs } = useContext(AppContext);
   const [outingType, setOutingType] = useState<OutingType>(OutingType.LOCAL);
   const [isLoading, setIsLoading] = useState(false);
   const [alert, setAlert] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -30,16 +31,16 @@ const OutingKiosk: React.FC<OutingKioskProps> = ({ gate }) => {
         setAlert({ message: 'No students registered in the system. Please register a student first.', type: 'error' });
         return;
     }
-    setScanFailed(false); // Reset failure state for a new action
+    setScanFailed(false);
     setCurrentAction(action);
     setIsCameraOpen(true);
-    setFacialScanAttempts(0); // Reset attempts on new action
+    setFacialScanAttempts(0);
   };
 
   const handleRetryScan = () => {
     setAlert(null);
     setScanFailed(false);
-    setIsCameraOpen(true); // Re-open camera without resetting counter
+    setIsCameraOpen(true);
   };
 
   const onCapture = async (imageBase64: string) => {
@@ -57,17 +58,16 @@ const OutingKiosk: React.FC<OutingKioskProps> = ({ gate }) => {
                 setScanFailed(true);
             } else {
                 setAlert({ message: `Facial scan failed after ${MAX_SCAN_ATTEMPTS} attempts. Please contact an administrator for manual entry.`, type: 'error' });
-                setScanFailed(false); // No more retries
+                setScanFailed(false);
             }
             return newAttemptCount;
         });
-
         setIsLoading(false);
         return;
     }
 
-    setFacialScanAttempts(0); // Reset on success
-    setScanFailed(false); // Hide retry button on success
+    setFacialScanAttempts(0);
+    setScanFailed(false);
     setAlert({ message: `Identity verified: ${matchedStudent.name} (${matchedStudent.rollNumber})`, type: 'success' });
 
     setTimeout(() => {
@@ -79,7 +79,7 @@ const OutingKiosk: React.FC<OutingKioskProps> = ({ gate }) => {
     }, 1500);
   };
 
-  const handleCheckOut = (student: Student) => {
+  const handleCheckOut = async (student: Student) => {
     const hasActiveOuting = outingLogs.some(log => log.studentId === student.id && log.checkInTime === null);
     if (hasActiveOuting) {
         setAlert({ message: `${student.name} already has an active outing. Cannot check out again.`, type: 'error' });
@@ -87,8 +87,7 @@ const OutingKiosk: React.FC<OutingKioskProps> = ({ gate }) => {
         return;
     }
 
-    const newLog: OutingRecord = {
-        id: crypto.randomUUID(),
+    const newLog: Omit<OutingRecord, 'id'> = {
         studentId: student.id,
         studentName: student.name,
         rollNumber: student.rollNumber,
@@ -102,37 +101,47 @@ const OutingKiosk: React.FC<OutingKioskProps> = ({ gate }) => {
         checkInGate: null,
     };
 
-    setOutingLogs(prevLogs => [newLog, ...prevLogs]);
-    setAlert({ message: `${student.name} checked out for ${outingType} outing successfully.`, type: 'success' });
-    setIsLoading(false);
+    try {
+        await firebaseService.addOutingLog(newLog);
+        setAlert({ message: `${student.name} checked out for ${outingType} outing successfully.`, type: 'success' });
+    } catch (error) {
+        console.error("Check-out failed:", error);
+        setAlert({ message: 'An error occurred during check-out.', type: 'error' });
+    } finally {
+        setIsLoading(false);
+    }
   }
 
-  const handleCheckIn = (student: Student) => {
-    const activeLogIndex = outingLogs.findIndex(
+  const handleCheckIn = async (student: Student) => {
+    const activeLog = outingLogs.find(
       log => log.studentId === student.id && log.outingType === outingType && log.checkInTime === null
     );
 
-    if (activeLogIndex === -1) {
+    if (!activeLog) {
       setAlert({ message: `No active ${outingType} outing found for ${student.name}.`, type: 'error' });
       setIsLoading(false);
       return;
     }
     
-    const updatedLogs = [...outingLogs];
-    updatedLogs[activeLogIndex] = {
-        ...updatedLogs[activeLogIndex],
+    const updateData = {
         checkInTime: new Date().toISOString(),
         checkInGate: gate,
     };
 
-    setOutingLogs(updatedLogs);
-    setAlert({ message: `${student.name} checked in successfully. Welcome back!`, type: 'success' });
-    setIsLoading(false);
+    try {
+        await firebaseService.updateOutingLog(activeLog.id, updateData);
+        setAlert({ message: `${student.name} checked in successfully. Welcome back!`, type: 'success' });
+    } catch(error) {
+        console.error("Check-in failed:", error);
+        setAlert({ message: 'An error occurred during check-in.', type: 'error' });
+    } finally {
+        setIsLoading(false);
+    }
   }
   
   const handleOutingTypeChange = (type: OutingType) => {
     setOutingType(type);
-    setFacialScanAttempts(0); // Reset attempts when outing type changes
+    setFacialScanAttempts(0);
     setScanFailed(false);
     setAlert(null);
   };

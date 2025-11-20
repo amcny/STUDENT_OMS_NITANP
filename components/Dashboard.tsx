@@ -59,6 +59,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
     return students.filter(student => onOutingIds.has(student.id));
   }, [outingLogs, students]);
 
+  const studentsOutToday = useMemo(() => {
+    const today = new Date();
+    const isToday = (isoString: string) => {
+        const date = new Date(isoString);
+        return date.getFullYear() === today.getFullYear() &&
+               date.getMonth() === today.getMonth() &&
+               date.getDate() === today.getDate();
+    };
+    const ids = new Set(
+        outingLogs.filter(log => isToday(log.checkOutTime)).map(log => log.studentId)
+    );
+    return students.filter(s => ids.has(s.id));
+  }, [outingLogs, students]);
+
   const overdueLogs = useMemo(() => {
     const now = new Date();
     return outingLogs.filter(log => {
@@ -126,12 +140,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
       return new Map([...dist.entries()].sort());
   };
 
+  // Used for Report (Currently Out)
   const demographicsOut = useMemo(() => {
       return {
           byYear: getDistribution(studentsOnOuting, 'year'),
           byHostel: getDistribution(studentsOnOuting.filter(s => s.studentType === 'Hosteller'), 'hostel'),
       };
   }, [studentsOnOuting]);
+
+  // Used for Dashboard Charts (Total activity today)
+  const demographicsToday = useMemo(() => {
+      return {
+          byYear: getDistribution(studentsOutToday, 'year'),
+          byHostel: getDistribution(studentsOutToday.filter(s => s.studentType === 'Hosteller'), 'hostel'),
+      };
+  }, [studentsOutToday]);
 
   const demographicsOverdue = useMemo(() => {
       return {
@@ -154,10 +177,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
     };
 
     return {
-        byYear: createChartData(demographicsOut.byYear),
-        byHostel: createChartData(demographicsOut.byHostel),
+        byYear: createChartData(demographicsToday.byYear),
+        byHostel: createChartData(demographicsToday.byHostel),
     };
-  }, [demographicsOut]);
+  }, [demographicsToday]);
 
   // --- Handlers ---
   
@@ -168,7 +191,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
   };
   
   const handleChartClick = (category: 'year' | 'hostel', label: string) => {
-    const filteredStudents = studentsOnOuting.filter(s => {
+    const filteredStudents = studentsOutToday.filter(s => {
         if(category === 'year') return s.year === label;
         if(category === 'hostel') return s.hostel === label;
         return false;

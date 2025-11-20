@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { Student } from '../types';
 import Modal from './Modal';
@@ -5,6 +6,7 @@ import CameraCapture from './CameraCapture';
 import Alert from './Alert';
 import { AppContext } from '../App';
 import { extractFaceFeatures } from '../services/facialRecognitionService';
+import * as firebaseService from '../services/firebaseService';
 import CustomSelect from './CustomSelect';
 import { 
     BRANCH_OPTIONS, YEAR_OPTIONS, GENDER_OPTIONS, 
@@ -23,7 +25,7 @@ const INITIAL_FORM_DATA = {
 
 
 const RegisterStudent: React.FC = () => {
-  const { students, setStudents } = useContext(AppContext);
+  const { students, role } = useContext(AppContext);
   const [formData, setFormData] = useState(INITIAL_FORM_DATA);
   const [faceImage, setFaceImage] = useState<string | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -41,11 +43,9 @@ const RegisterStudent: React.FC = () => {
   const [photoImportStatus, setPhotoImportStatus] = useState<{ message: string; type: 'success' | 'error' | 'info'; progress?: number; total?: number } | null>(null);
 
   useEffect(() => {
-    // When gender or student type changes, reset hostel since options depend on it.
     if (formData.gender || formData.studentType) {
         setFormData(prev => ({ ...prev, hostel: '' }));
     }
-    // If student becomes a Day-Scholar, clear hostel and room number.
     if (formData.studentType === 'Day-Scholar') {
       setFormData(prev => ({ ...prev, hostel: '', roomNumber: '' }));
     }
@@ -107,18 +107,16 @@ const RegisterStudent: React.FC = () => {
     }
 
     setIsSaving(true);
-    setAlert({ message: 'Analyzing face... Please wait.', type: 'info' });
+    setAlert({ message: 'Analyzing face and saving to database... Please wait.', type: 'info' });
 
     try {
       const features = await extractFaceFeatures(faceImage);
-      const newStudent: Student = {
-        id: crypto.randomUUID(),
+      const studentData = {
         ...formData,
-        faceImage,
         faceFeatures: features,
       };
-      setStudents(prev => [...prev, newStudent]);
-      setAlert({ message: `${newStudent.name} has been registered successfully!`, type: 'success' });
+      await firebaseService.addStudent(studentData, faceImage);
+      setAlert({ message: `${formData.name} has been registered successfully!`, type: 'success' });
       resetForm();
     } catch (error: any) {
       console.error("Registration failed:", error);
@@ -141,7 +139,7 @@ const RegisterStudent: React.FC = () => {
     setExcelImportStatus({ message: 'Reading and processing Excel file...', type: 'info' });
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const data = new Uint8Array(event.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -151,7 +149,6 @@ const RegisterStudent: React.FC = () => {
 
         if (json.length === 0) {
             setExcelImportStatus({ message: 'The Excel file is empty or in an invalid format.', type: 'error' });
-            setIsImportingExcel(false);
             return;
         }
 
@@ -159,11 +156,10 @@ const RegisterStudent: React.FC = () => {
         const missingHeaders = MANDATORY_HEADERS.filter(h => !headers.includes(h));
         if (missingHeaders.length > 0) {
             setExcelImportStatus({ message: `Missing required columns in Excel file: ${missingHeaders.join(', ')}`, type: 'error' });
-            setIsImportingExcel(false);
             return;
         }
 
-        const newStudents: Student[] = [];
+        const newStudents: Omit<Student, 'id'>[] = [];
         const existingRegNumbers = new Set(students.map(s => s.registrationNumber));
         const duplicateRegNumbersInFile = new Set<string>();
         let addedCount = 0;
@@ -172,18 +168,17 @@ const RegisterStudent: React.FC = () => {
         for (const row of json) {
             if (!row.name || !row.registrationNumber) {
                 skippedCount++;
-                continue; // Skip rows with missing mandatory data
+                continue;
             }
             
             const regNum = String(row.registrationNumber).toUpperCase();
             if (existingRegNumbers.has(regNum) || duplicateRegNumbersInFile.has(regNum)) {
                 skippedCount++;
-                continue; // Skip existing or duplicates within the file
+                continue;
             }
             duplicateRegNumbersInFile.add(regNum);
             
             newStudents.push({
-                id: crypto.randomUUID(),
                 name: String(row.name).toUpperCase(),
                 rollNumber: String(row.rollNumber || '').toUpperCase(),
                 registrationNumber: regNum,
@@ -200,7 +195,9 @@ const RegisterStudent: React.FC = () => {
             addedCount++;
         }
         
-        setStudents(prev => [...prev, ...newStudents]);
+        if(addedCount > 0) {
+            await firebaseService.addStudentsBatch(newStudents);
+        }
         setExcelImportStatus({ message: `Successfully imported ${addedCount} new students. ${skippedCount} rows were skipped due to missing data or duplicates.`, type: 'success' });
 
       } catch (error) {
@@ -236,8 +233,8 @@ const RegisterStudent: React.FC = () => {
   };
 
   const handlePhotoFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
+      const files = Array.from(e.target.files || []) as File[];
+      if (files.length === 0) return;
 
       setIsImportingPhotos(true);
       setPhotoImportStatus({
@@ -248,50 +245,44 @@ const RegisterStudent: React.FC = () => {
       });
 
       const studentMap = new Map(students.map(s => [s.registrationNumber.toUpperCase(), s.id]));
-      const updatedStudents = [...students];
-      
       let successCount = 0;
       const notFoundFiles: string[] = [];
       const errorFiles: string[] = [];
-      
-      for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          const registrationNumber = file.name.split('.').slice(0, -1).join('.').toUpperCase();
-          
-          setPhotoImportStatus({
-              message: `Processing ${i + 1}/${files.length}: ${file.name}`,
-              type: 'info',
-              progress: i + 1,
-              total: files.length,
-          });
 
-          const studentId = studentMap.get(registrationNumber);
-          if (!studentId) {
-              notFoundFiles.push(file.name);
-              continue;
-          }
-
-          try {
-              const base64Image = await readFileAsBase64(file);
-              const features = await extractFaceFeatures(base64Image);
+      // Process files in parallel batches to speed up
+      const processBatch = async (batch: File[]) => {
+          await Promise.all(batch.map(async (file, index) => {
+              const registrationNumber = file.name.split('.').slice(0, -1).join('.').toUpperCase();
               
-              const studentIndex = updatedStudents.findIndex(s => s.id === studentId);
-              if (studentIndex !== -1) {
-                  updatedStudents[studentIndex] = {
-                      ...updatedStudents[studentIndex],
-                      faceImage: base64Image,
-                      faceFeatures: features,
-                  };
-                  successCount++;
+              if (!studentMap.has(registrationNumber)) {
+                  notFoundFiles.push(file.name);
+                  return;
               }
-          } catch (error) {
-              console.error(`Failed to process image for ${registrationNumber}:`, error);
-              errorFiles.push(file.name);
-          }
+
+              try {
+                  const base64Image = await readFileAsBase64(file);
+                  const features = await extractFaceFeatures(base64Image);
+                  await firebaseService.updateStudentPhotoByRegNo(registrationNumber, base64Image, features);
+                  successCount++;
+              } catch (error) {
+                  console.error(`Failed to process image for ${registrationNumber}:`, error);
+                  errorFiles.push(file.name);
+              } finally {
+                  setPhotoImportStatus(prev => ({
+                      ...prev!,
+                      message: `Processing...`,
+                      progress: (prev?.progress || 0) + 1,
+                  }));
+              }
+          }));
+      };
+      
+      const batchSize = 10;
+      for (let i = 0; i < files.length; i += batchSize) {
+          const batch = files.slice(i, i + batchSize);
+          await processBatch(batch);
       }
       
-      setStudents(updatedStudents);
-
       let summary = `Import complete. Successfully processed ${successCount} photos.`;
       if (notFoundFiles.length > 0) {
           summary += ` ${notFoundFiles.length} photos did not match any student.`;
@@ -306,9 +297,17 @@ const RegisterStudent: React.FC = () => {
       });
       
       setIsImportingPhotos(false);
-
       if (e.target) e.target.value = '';
   };
+  
+  if (role !== 'admin') {
+    return (
+        <div className="bg-white p-8 rounded-lg shadow-xl max-w-4xl mx-auto text-center">
+            <h2 className="text-3xl font-bold text-red-600 mb-4">Access Denied</h2>
+            <p className="text-gray-700 text-lg">You do not have permission to register students. Please contact an administrator.</p>
+        </div>
+    );
+  }
   
   const currentHostelOptions = formData.gender === 'Male' ? BOYS_HOSTELS : (formData.gender === 'Female' ? GIRLS_HOSTELS : []);
   const baseFieldClasses = "w-full px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 text-gray-800 shadow-sm";

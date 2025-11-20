@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../App'; // Import the shared auth instance
+// FIX: Import auth from the correct firebase configuration file.
+import { auth } from '../firebase'; // Import the shared auth instance
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
