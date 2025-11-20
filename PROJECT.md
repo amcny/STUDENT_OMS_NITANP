@@ -61,7 +61,7 @@ The system features **Facial Recognition** for rapid identification, a robust **
 ## 3. Workflows
 
 ### Security & Permissions
-*   **Login:** Gate-specific login (Front Gate / Back Gate).
+*   **Authentication:** User login is managed by **Firebase Authentication** using email and password. Gate-specific accounts (`FRONTGATE`, `BACKGATE`) provide access.
 *   **PIN Protection:** Critical actions (Deleting logs, Bulk deletions, Editing remarks) require the security PIN: `200405`.
 
 ### Student Outing Flow
@@ -86,12 +86,15 @@ The system features **Facial Recognition** for rapid identification, a robust **
 *   **Language:** TypeScript
 *   **Styling:** Tailwind CSS
 *   **State Management:** React Context API
-*   **Persistence:** Browser LocalStorage (No backend server required for this version).
+*   **Persistence & Auth:**
+    *   **Authentication:** Firebase Authentication
+    *   **Application Data:** Browser LocalStorage
 *   **Key Libraries:**
+    *   `firebase`: For user authentication.
     *   `face-api.js`: Client-side facial recognition.
     *   `xlsx`: Excel file import/export.
     *   `jspdf` & `html2canvas`: PDF Report generation.
-    *   `chart.js` & `react-chartjs-2`: Data visualization.
+    *   `chart.js`: Data visualization.
 
 ## 5. Deployment & Usage
 *   The application is designed to run in a modern web browser (Chrome/Edge/Firefox).
