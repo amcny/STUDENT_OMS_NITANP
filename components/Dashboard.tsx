@@ -148,6 +148,35 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
       };
   }, [studentsOnOuting]);
 
+  // Used for Report (Hostel Occupancy)
+  const hostelOccupancy = useMemo(() => {
+      // 1. Calculate Total Registered per Hostel
+      const totalPerHostel = new Map<string, number>();
+      students.forEach(s => {
+          if (s.studentType === 'Hosteller' && s.hostel) {
+              totalPerHostel.set(s.hostel, (totalPerHostel.get(s.hostel) || 0) + 1);
+          }
+      });
+
+      // 2. Get Currently Out (already calculated)
+      const outPerHostel = demographicsOut.byHostel;
+
+      // 3. Build consolidated data
+      const occupancyData: Array<{ hostel: string; total: number; out: number; present: number }> = [];
+      
+      // Sort hostels alphabetically
+      const sortedHostels = Array.from(totalPerHostel.keys()).sort();
+
+      sortedHostels.forEach(hostel => {
+          const total = totalPerHostel.get(hostel) || 0;
+          const out = outPerHostel.get(hostel) || 0;
+          const present = total - out;
+          occupancyData.push({ hostel, total, out, present });
+      });
+
+      return occupancyData;
+  }, [students, demographicsOut.byHostel]);
+
   // Used for Dashboard Charts (Total activity today)
   const demographicsToday = useMemo(() => {
       return {
@@ -373,9 +402,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
         </div>
 
         {/* 3. Overdue Analysis */}
-        <div className="mb-6">
+        <div className="mb-8">
              <h3 className="text-lg font-bold text-red-800 border-l-4 border-red-600 pl-2 mb-4 uppercase">3. Overdue Analysis</h3>
-             <div className="grid grid-cols-2 gap-8 mb-8">
+             <div className="grid grid-cols-2 gap-8 mb-6">
                  <div>
                      <h4 className="font-bold text-gray-700 mb-2 text-sm text-center uppercase">Overdue by Year</h4>
                      <SimpleTable data={demographicsOverdue.byYear} labelHeader="Year" valueHeader="Overdue Count" />
@@ -399,7 +428,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                      </tr>
                  </thead>
                  <tbody>
-                     {overdueLogs.slice(0, 20).map(log => {
+                     {overdueLogs.slice(0, 10).map(log => {
                           const s = studentMap.get(log.studentId);
                           return (
                             <tr key={log.id} className="even:bg-gray-50">
@@ -412,16 +441,44 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                             </tr>
                           );
                      })}
-                     {overdueLogs.length > 20 && (
+                     {overdueLogs.length > 10 && (
                          <tr>
                              <td colSpan={6} className="border border-gray-300 px-3 py-2 text-center text-gray-500 italic">
-                                 ...and {overdueLogs.length - 20} more students.
+                                 ...and {overdueLogs.length - 10} more students.
                              </td>
                          </tr>
                      )}
                      {overdueLogs.length === 0 && (
                          <tr><td colSpan={6} className="border border-gray-300 px-3 py-4 text-center text-green-600 font-medium">No overdue students.</td></tr>
                      )}
+                 </tbody>
+             </table>
+        </div>
+        
+        {/* 4. Hostel Occupancy Status */}
+        <div className="mb-6">
+             <h3 className="text-lg font-bold text-slate-800 border-l-4 border-slate-600 pl-2 mb-4 uppercase">4. Hostel Occupancy Status</h3>
+             <table className="w-full border-collapse border border-gray-300 text-xs">
+                 <thead className="bg-slate-100">
+                     <tr>
+                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-gray-700 uppercase tracking-wider">Hostel Name</th>
+                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-gray-700 uppercase tracking-wider">Total Registered</th>
+                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-yellow-700 uppercase tracking-wider">Currently Out</th>
+                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-green-700 uppercase tracking-wider">Currently Present</th>
+                     </tr>
+                 </thead>
+                 <tbody>
+                    {hostelOccupancy.map(row => (
+                        <tr key={row.hostel} className="even:bg-gray-50">
+                            <td className="border border-gray-300 px-3 py-2 font-bold text-gray-800">{row.hostel}</td>
+                            <td className="border border-gray-300 px-3 py-2 text-right text-gray-800">{row.total}</td>
+                            <td className="border border-gray-300 px-3 py-2 text-right text-yellow-600 font-semibold">{row.out}</td>
+                            <td className="border border-gray-300 px-3 py-2 text-right text-green-600 font-bold">{row.present}</td>
+                        </tr>
+                    ))}
+                    {hostelOccupancy.length === 0 && (
+                        <tr><td colSpan={4} className="border border-gray-300 px-3 py-4 text-center text-gray-500 italic">No hostel data available.</td></tr>
+                    )}
                  </tbody>
              </table>
         </div>
