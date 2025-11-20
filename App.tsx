@@ -1,3 +1,4 @@
+
 import React, { useState, createContext, useEffect } from 'react';
 import Header from './components/Header';
 import RegisterStudent from './components/RegisterStudent';
@@ -52,10 +53,16 @@ const App: React.FC = () => {
       setIsKioskOnlyMode(true);
     }
 
-    // Main effect to handle authentication state and subsequent data fetching.
+    // --- DATA LISTENERS ---
+    // Initialize listeners immediately on mount and keep them active.
+    // The Firestore SDK will automatically retry connections if auth state changes.
+    // Note: Console permission errors are expected while logged out if rules require auth.
+    const unsubscribeStudents = onStudentsUpdate(setStudents);
+    const unsubscribeOutingLogs = onOutingLogsUpdate(setOutingLogs);
+    const unsubscribeVisitorLogs = onVisitorLogsUpdate(setVisitorLogs);
+
+    // --- AUTH LISTENER ---
     const unsubscribeAuth = onAuthStateChanged(auth, (user: FirebaseUser | null) => {
-      let dataUnsubscribers: (() => void)[] = [];
-      
       if (user && user.email) {
         // --- USER IS LOGGED IN ---
         const email = user.email.toLowerCase();
@@ -80,32 +87,19 @@ const App: React.FC = () => {
         // Set auth state now that we have a user.
         setAuthState({ gate: gateName, isLoading: false, role });
 
-        // **CRITICAL FIX**: Only set up data listeners AFTER authentication is confirmed.
-        const unsubscribeStudents = onStudentsUpdate(setStudents);
-        const unsubscribeOutingLogs = onOutingLogsUpdate(setOutingLogs);
-        const unsubscribeVisitorLogs = onVisitorLogsUpdate(setVisitorLogs);
-        
-        dataUnsubscribers = [unsubscribeStudents, unsubscribeOutingLogs, unsubscribeVisitorLogs];
-
       } else {
         // --- USER IS LOGGED OUT ---
         setAuthState({ gate: null, isLoading: false, role: null });
-        // Clear all data to prevent showing stale info on next login.
-        setStudents([]);
-        setOutingLogs([]);
-        setVisitorLogs([]);
+        // We do NOT clear the data here, effectively listening "always" as requested.
       }
-      
-      // The onAuthStateChanged listener can return a cleanup function.
-      // This will be called when the auth state changes again (e.g., user logs out).
-      return () => {
-        dataUnsubscribers.forEach(unsub => unsub());
-      };
     });
 
     // Cleanup function for when the App component unmounts.
     return () => {
       unsubscribeAuth();
+      unsubscribeStudents();
+      unsubscribeOutingLogs();
+      unsubscribeVisitorLogs();
     };
   }, []); // Empty dependency array ensures this effect runs only once on mount.
 
