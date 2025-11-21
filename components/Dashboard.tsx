@@ -307,18 +307,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
       <table className="w-full border-collapse border border-gray-300 text-sm">
           <thead className="bg-gray-100">
               <tr>
-                  <th className="border border-gray-300 px-3 py-2 text-left font-bold text-gray-700 uppercase text-xs tracking-wider">{labelHeader}</th>
-                  <th className="border border-gray-300 px-3 py-2 text-right font-bold text-gray-700 uppercase text-xs tracking-wider">{valueHeader}</th>
+                  <th className="border border-gray-300 px-3 py-2 text-left font-bold text-gray-700 uppercase text-xs tracking-wider align-middle">{labelHeader}</th>
+                  <th className="border border-gray-300 px-3 py-2 text-right font-bold text-gray-700 uppercase text-xs tracking-wider align-middle">{valueHeader}</th>
               </tr>
           </thead>
           <tbody>
               {Array.from(data.entries()).map(([key, val]) => (
                   <tr key={key} className="even:bg-gray-50">
-                      <td className="border border-gray-300 px-3 py-2 text-gray-800 font-medium">{key}</td>
-                      <td className="border border-gray-300 px-3 py-2 text-right text-gray-800 font-bold">{val}</td>
+                      <td className="border border-gray-300 px-3 py-2 text-gray-800 font-medium align-middle">{key}</td>
+                      <td className="border border-gray-300 px-3 py-2 text-right text-gray-800 font-bold align-middle">{val}</td>
                   </tr>
               ))}
-               {data.size === 0 && <tr><td colSpan={2} className="border border-gray-300 px-3 py-2 text-center text-gray-500 italic">No data</td></tr>}
+               {data.size === 0 && <tr><td colSpan={2} className="border border-gray-300 px-3 py-2 text-center text-gray-500 italic align-middle">No data</td></tr>}
           </tbody>
       </table>
   );
@@ -351,8 +351,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
             top: 0, 
             left: '-9999px',
             zIndex: -10000,
-            lineHeight: '1.2', // Fixes vertical drift in html2canvas
-            fontFamily: 'Arial, sans-serif' // Ensures font consistency
+            lineHeight: 'normal', // Reset line height for consistency
+            fontFamily: 'Arial, sans-serif',
+            fontVariant: 'normal',
+            letterSpacing: 'normal'
         }}
       >
         {/* Header */}
@@ -367,7 +369,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
 
         {/* 1. Executive Summary */}
         <div className="mb-8">
-            <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-2 mb-3 uppercase flex items-center">1. Executive Summary</h3>
+            <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-3 py-1 mb-3 uppercase block leading-none">1. Executive Summary</h3>
             <div className="grid grid-cols-4 gap-4">
                 <div className="border border-gray-200 p-3 rounded bg-gray-50">
                     <p className="text-xs text-gray-500 uppercase font-semibold">Total Students</p>
@@ -390,7 +392,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
 
         {/* 2. Current Demographics */}
         <div className="mb-8">
-             <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-2 mb-4 uppercase flex items-center">2. Demographics (Currently Out)</h3>
+             <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-3 py-1 mb-4 uppercase block leading-none">2. Demographics (Currently Out)</h3>
              <div className="grid grid-cols-2 gap-8">
                  <div>
                      <h4 className="font-bold text-gray-700 mb-2 text-sm text-center uppercase">By Year</h4>
@@ -405,7 +407,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
 
         {/* 3. Overdue Analysis */}
         <div className="mb-8">
-             <h3 className="text-lg font-bold text-red-800 border-l-4 border-red-600 pl-2 mb-4 uppercase flex items-center">3. Overdue Analysis</h3>
+             <h3 className="text-lg font-bold text-red-800 border-l-4 border-red-600 pl-3 py-1 mb-4 uppercase block leading-none">3. Overdue Analysis</h3>
              <div className="grid grid-cols-2 gap-8 mb-6">
                  <div>
                      <h4 className="font-bold text-gray-700 mb-2 text-sm text-center uppercase">Overdue by Year</h4>
@@ -421,12 +423,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
              <table className="w-full border-collapse border border-gray-300 text-xs">
                  <thead className="bg-red-50">
                      <tr>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider">Name</th>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider">Roll No</th>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider">Year</th>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider">Hostel</th>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider">Out Time</th>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider">Type</th>
+                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider align-middle">Name</th>
+                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider align-middle">Roll No</th>
+                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider align-middle">Year</th>
+                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider align-middle">Hostel</th>
+                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider align-middle">Out Time</th>
+                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider align-middle">Type</th>
                      </tr>
                  </thead>
                  <tbody>
@@ -434,24 +436,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                           const s = studentMap.get(log.studentId);
                           return (
                             <tr key={log.id} className="even:bg-gray-50">
-                                <td className="border border-gray-300 px-3 py-2 font-bold text-gray-800">{log.studentName}</td>
-                                <td className="border border-gray-300 px-3 py-2 text-gray-700">{log.rollNumber}</td>
-                                <td className="border border-gray-300 px-3 py-2 text-gray-700">{log.year}</td>
-                                <td className="border border-gray-300 px-3 py-2 text-gray-700">{s?.hostel || '-'}</td>
-                                <td className="border border-gray-300 px-3 py-2 text-gray-700">{new Date(log.checkOutTime).toLocaleString()}</td>
-                                <td className="border border-gray-300 px-3 py-2 text-gray-700">{log.outingType}</td>
+                                <td className="border border-gray-300 px-3 py-2 font-bold text-gray-800 align-middle">{log.studentName}</td>
+                                <td className="border border-gray-300 px-3 py-2 text-gray-700 align-middle">{log.rollNumber}</td>
+                                <td className="border border-gray-300 px-3 py-2 text-gray-700 align-middle">{log.year}</td>
+                                <td className="border border-gray-300 px-3 py-2 text-gray-700 align-middle">{s?.hostel || '-'}</td>
+                                <td className="border border-gray-300 px-3 py-2 text-gray-700 align-middle">{new Date(log.checkOutTime).toLocaleString()}</td>
+                                <td className="border border-gray-300 px-3 py-2 text-gray-700 align-middle">{log.outingType}</td>
                             </tr>
                           );
                      })}
                      {overdueLogs.length > 10 && (
                          <tr>
-                             <td colSpan={6} className="border border-gray-300 px-3 py-2 text-center text-gray-500 italic">
+                             <td colSpan={6} className="border border-gray-300 px-3 py-2 text-center text-gray-500 italic align-middle">
                                  ...and {overdueLogs.length - 10} more students.
                              </td>
                          </tr>
                      )}
                      {overdueLogs.length === 0 && (
-                         <tr><td colSpan={6} className="border border-gray-300 px-3 py-4 text-center text-green-600 font-medium">No overdue students.</td></tr>
+                         <tr><td colSpan={6} className="border border-gray-300 px-3 py-4 text-center text-green-600 font-medium align-middle">No overdue students.</td></tr>
                      )}
                  </tbody>
              </table>
@@ -459,27 +461,27 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
         
         {/* 4. Hostel Occupancy Status */}
         <div className="mb-6">
-             <h3 className="text-lg font-bold text-slate-800 border-l-4 border-slate-600 pl-2 mb-4 uppercase flex items-center">4. Hostel Occupancy Status</h3>
+             <h3 className="text-lg font-bold text-slate-800 border-l-4 border-slate-600 pl-3 py-1 mb-4 uppercase block leading-none">4. Hostel Occupancy Status</h3>
              <table className="w-full border-collapse border border-gray-300 text-xs">
                  <thead className="bg-slate-100">
                      <tr>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-gray-700 uppercase tracking-wider">Hostel Name</th>
-                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-gray-700 uppercase tracking-wider">Total Registered</th>
-                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-yellow-700 uppercase tracking-wider">Currently Out</th>
-                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-green-700 uppercase tracking-wider">Currently Present</th>
+                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-gray-700 uppercase tracking-wider align-middle">Hostel Name</th>
+                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-gray-700 uppercase tracking-wider align-middle">Total Registered</th>
+                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-yellow-700 uppercase tracking-wider align-middle">Currently Out</th>
+                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-green-700 uppercase tracking-wider align-middle">Currently Present</th>
                      </tr>
                  </thead>
                  <tbody>
                     {hostelOccupancy.map(row => (
                         <tr key={row.hostel} className="even:bg-gray-50">
-                            <td className="border border-gray-300 px-3 py-2 font-bold text-gray-800">{row.hostel}</td>
-                            <td className="border border-gray-300 px-3 py-2 text-right text-gray-800">{row.total}</td>
-                            <td className="border border-gray-300 px-3 py-2 text-right text-yellow-600 font-semibold">{row.out}</td>
-                            <td className="border border-gray-300 px-3 py-2 text-right text-green-600 font-bold">{row.present}</td>
+                            <td className="border border-gray-300 px-3 py-2 font-bold text-gray-800 align-middle">{row.hostel}</td>
+                            <td className="border border-gray-300 px-3 py-2 text-right text-gray-800 align-middle">{row.total}</td>
+                            <td className="border border-gray-300 px-3 py-2 text-right text-yellow-600 font-semibold align-middle">{row.out}</td>
+                            <td className="border border-gray-300 px-3 py-2 text-right text-green-600 font-bold align-middle">{row.present}</td>
                         </tr>
                     ))}
                     {hostelOccupancy.length === 0 && (
-                        <tr><td colSpan={4} className="border border-gray-300 px-3 py-4 text-center text-gray-500 italic">No hostel data available.</td></tr>
+                        <tr><td colSpan={4} className="border border-gray-300 px-3 py-4 text-center text-gray-500 italic align-middle">No hostel data available.</td></tr>
                     )}
                  </tbody>
              </table>
