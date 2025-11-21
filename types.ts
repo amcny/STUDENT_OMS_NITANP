@@ -55,5 +55,13 @@ export interface VisitorPassRecord {
   outGateName: string | null;
 }
 
+// New interface for the users collection
+export interface UserProfile {
+  uid: string;
+  email: string;
+  role: 'admin' | 'security';
+  gateName: string;
+  lastLogin: string | null; // ISO String
+}
 
 export type View = 'dashboard' | 'kiosk' | 'register' | 'logbook' | 'allStudents' | 'visitorPass';

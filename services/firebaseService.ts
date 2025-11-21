@@ -6,6 +6,8 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  getDoc,
+  setDoc,
   writeBatch,
   Timestamp,
   query,
@@ -14,7 +16,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
-import { Student, OutingRecord, VisitorPassRecord } from '../types';
+import { Student, OutingRecord, VisitorPassRecord, UserProfile } from '../types';
 
 // --- Helper Functions for Data Conversion ---
 
@@ -27,7 +29,7 @@ const toFirestore = (data: any) => {
   const firestoreData: { [key: string]: any } = { ...data, updatedAt: serverTimestamp() };
   
   // Convert specific string fields to Timestamps
-  ['checkOutTime', 'checkInTime', 'inTime', 'outTime', 'date'].forEach(field => {
+  ['checkOutTime', 'checkInTime', 'inTime', 'outTime', 'date', 'lastLogin'].forEach(field => {
     if (firestoreData[field] && typeof firestoreData[field] === 'string') {
       firestoreData[field] = Timestamp.fromDate(new Date(firestoreData[field]));
     }
@@ -87,6 +89,40 @@ export const onVisitorLogsUpdate = (callback: (logs: VisitorPassRecord[]) => voi
     callback(logsList);
   });
 };
+
+// --- User/Auth Management ---
+
+export const recordUserLogin = async (uid: string, email: string, role: string, gateName: string): Promise<string | null> => {
+    const userRef = doc(db, 'users', uid);
+    
+    try {
+        // 1. Get the document first to retrieve the *previous* login time
+        const docSnap = await getDoc(userRef);
+        let previousLogin: string | null = null;
+        
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.lastLogin instanceof Timestamp) {
+                previousLogin = data.lastLogin.toDate().toISOString();
+            }
+        }
+
+        // 2. Update with the *current* login time
+        await setDoc(userRef, {
+            email,
+            role,
+            gateName,
+            lastLogin: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        return previousLogin;
+    } catch (error) {
+        console.error("Error recording user login:", error);
+        return null;
+    }
+};
+
 
 // --- Student Management ---
 

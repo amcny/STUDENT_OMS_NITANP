@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { View } from '../types';
 
@@ -5,6 +6,7 @@ interface HeaderProps {
   currentView: View;
   onViewChange: (view: View) => void;
   gate: string;
+  lastLogin: string | null;
   onLogout: () => void;
 }
 
@@ -28,7 +30,7 @@ const NavButton: React.FC<{
   );
 };
 
-const Header: React.FC<HeaderProps> = ({ currentView, onViewChange, gate, onLogout }) => {
+const Header: React.FC<HeaderProps> = ({ currentView, onViewChange, gate, lastLogin, onLogout }) => {
   const handleKioskClick = () => {
     // Open Kiosk in a new tab with a query parameter
     window.open(window.location.pathname + '?view=kiosk', '_blank');
@@ -55,9 +57,16 @@ const Header: React.FC<HeaderProps> = ({ currentView, onViewChange, gate, onLogo
             <NavButton label="Visitor Pass" view="visitorPass" currentView={currentView} onViewChange={onViewChange} />
         </div>
         <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-300 hidden sm:block">
-                Logged in: <span className="font-semibold text-white">{gate}</span>
-            </span>
+            <div className="flex flex-col items-end">
+                <span className="text-sm text-gray-300 hidden sm:block">
+                    Logged in: <span className="font-semibold text-white">{gate}</span>
+                </span>
+                {lastLogin && (
+                    <span className="text-[10px] text-gray-400 hidden sm:block">
+                        Last Login: {new Date(lastLogin).toLocaleString()}
+                    </span>
+                )}
+            </div>
             <button 
                 onClick={onLogout} 
                 className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-200 bg-red-500 text-white hover:bg-red-600 shadow"

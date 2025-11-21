@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { Student, View } from '../types';
@@ -24,6 +25,7 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
     studentType: 'All',
     gender: 'All',
     missingPhoto: false,
+    incompleteData: false,
   });
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [studentToEdit, setStudentToEdit] = useState<Student | null>(null);
@@ -42,8 +44,8 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
     setFilters(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleMissingPhotoToggle = () => {
-    setFilters(prev => ({ ...prev, missingPhoto: !prev.missingPhoto }));
+  const handleCheckboxFilterToggle = (name: 'missingPhoto' | 'incompleteData') => {
+    setFilters(prev => ({ ...prev, [name]: !prev[name] }));
   };
 
   const clearFilters = () => {
@@ -53,6 +55,7 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
       studentType: 'All',
       gender: 'All',
       missingPhoto: false,
+      incompleteData: false,
     });
     setSearchTerm('');
   };
@@ -98,6 +101,24 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
     setSelectedStudentIds(new Set());
   };
 
+  // Helper to identify missing fields
+  const getMissingFields = (student: Student): string[] => {
+      const missing: string[] = [];
+      if (!student.name) missing.push('Name');
+      if (!student.rollNumber) missing.push('Roll No');
+      if (!student.registrationNumber) missing.push('Reg No');
+      if (!student.branch) missing.push('Branch');
+      if (!student.year) missing.push('Year');
+      if (!student.gender) missing.push('Gender');
+      if (!student.contactNumber) missing.push('Contact');
+      if (!student.studentType) missing.push('Student Type');
+      
+      if (student.studentType === 'Hosteller') {
+          if (!student.hostel) missing.push('Hostel');
+          if (!student.roomNumber) missing.push('Room No');
+      }
+      return missing;
+  };
 
   const sortedAndFilteredStudents = useMemo(() => {
     let filtered = students.filter(student => {
@@ -106,6 +127,11 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
         if (filters.studentType !== 'All' && student.studentType !== filters.studentType) return false;
         if (filters.gender !== 'All' && student.gender !== filters.gender) return false;
         if (filters.missingPhoto && student.faceImage !== null) return false;
+        
+        if (filters.incompleteData) {
+            const missing = getMissingFields(student);
+            if (missing.length === 0) return false;
+        }
         
         if (searchTerm) {
              return Object.values(student).some(value =>
@@ -193,10 +219,16 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
                     onChange={e => setSearchTerm(e.target.value)}
                     className="w-full sm:w-1/3 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900"
                 />
-                <label className="flex items-center space-x-2 cursor-pointer select-none">
-                    <input type="checkbox" checked={filters.missingPhoto} onChange={handleMissingPhotoToggle} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"/>
-                    <span className="text-gray-700 font-medium">Show only students with missing photos</span>
-                </label>
+                <div className="flex flex-col sm:flex-row gap-4">
+                    <label className="flex items-center space-x-2 cursor-pointer select-none">
+                        <input type="checkbox" checked={filters.missingPhoto} onChange={() => handleCheckboxFilterToggle('missingPhoto')} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"/>
+                        <span className="text-gray-700 font-medium">Missing Photo</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer select-none">
+                        <input type="checkbox" checked={filters.incompleteData} onChange={() => handleCheckboxFilterToggle('incompleteData')} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"/>
+                        <span className="text-gray-700 font-medium">Incomplete Data</span>
+                    </label>
+                </div>
             </div>
         </div>
         
@@ -272,64 +304,79 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {sortedAndFilteredStudents.map(student => (
-                <tr 
-                  key={student.id} 
-                  className={`transition-colors duration-150 ${isBulkSelectMode && selectedStudentIds.has(student.id) ? 'bg-sky-100/70' : 'hover:bg-gray-50'}`}
-                >
-                  {isBulkSelectMode && (
-                    <td className="px-4 py-4">
-                      <div className="flex justify-center items-center">
-                          <input 
-                              type="checkbox"
-                              className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                              checked={selectedStudentIds.has(student.id)}
-                              onChange={(e) => handleSelectOne(student.id, e.target.checked)}
-                          />
-                      </div>
-                    </td>
-                  )}
-                  <td className="px-6 py-4">
-                    <div className="relative w-10 h-10">
-                        {student.faceImage ? (
-                            <img src={student.faceImage} alt={student.name} className="w-10 h-10 rounded-full object-cover" />
-                        ) : (
-                            <>
-                                <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center" title="Biometric data missing. Please edit to add a photo.">
-                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
-                                </div>
-                                <div className="absolute -top-1 -right-1" title="Photo missing">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-500 bg-white rounded-full" viewBox="0 0 20 20" fill="currentColor">
-                                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                    </svg>
-                                </div>
-                            </>
-                        )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <span className="text-blue-600 hover:underline cursor-pointer" onClick={() => setSelectedStudent(student)}>
-                        {student.name}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.registrationNumber}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.branch}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.year}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.contactNumber}</td>
-                  {role === 'admin' && (
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center space-x-4">
-                        <button onClick={() => setStudentToEdit(student)} className="text-gray-500 hover:text-indigo-600 transition-colors" title="Edit Student">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" /></svg>
-                        </button>
-                        <button onClick={() => setPinAction({ action: 'singleDelete', student })} className="text-gray-500 hover:text-red-600 transition-colors" title="Delete Student">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
-                        </button>
+              {sortedAndFilteredStudents.map(student => {
+                  const missingFields = getMissingFields(student);
+                  return (
+                    <tr 
+                      key={student.id} 
+                      className={`transition-colors duration-150 ${isBulkSelectMode && selectedStudentIds.has(student.id) ? 'bg-sky-100/70' : 'hover:bg-gray-50'}`}
+                    >
+                      {isBulkSelectMode && (
+                        <td className="px-4 py-4">
+                          <div className="flex justify-center items-center">
+                              <input 
+                                  type="checkbox"
+                                  className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                                  checked={selectedStudentIds.has(student.id)}
+                                  onChange={(e) => handleSelectOne(student.id, e.target.checked)}
+                              />
+                          </div>
+                        </td>
+                      )}
+                      <td className="px-6 py-4">
+                        <div className="relative w-10 h-10">
+                            {student.faceImage ? (
+                                <img src={student.faceImage} alt={student.name} className="w-10 h-10 rounded-full object-cover" />
+                            ) : (
+                                <>
+                                    <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center" title="Biometric data missing. Please edit to add a photo.">
+                                       <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+                                    </div>
+                                    <div className="absolute -top-1 -right-1" title="Photo missing">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-500 bg-white rounded-full" viewBox="0 0 20 20" fill="currentColor">
+                                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                    </div>
+                                </>
+                            )}
                         </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex items-center">
+                            <span className="text-blue-600 hover:underline cursor-pointer" onClick={() => setSelectedStudent(student)}>
+                                {student.name}
+                            </span>
+                            {missingFields.length > 0 && (
+                                <div className="ml-2 relative group">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-500 cursor-help" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                    </svg>
+                                    <div className="absolute left-0 bottom-full mb-2 w-48 p-2 bg-gray-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
+                                        Missing: {missingFields.join(', ')}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.registrationNumber || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.branch || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.year || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.contactNumber || '-'}</td>
+                      {role === 'admin' && (
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex items-center space-x-4">
+                            <button onClick={() => setStudentToEdit(student)} className="text-gray-500 hover:text-indigo-600 transition-colors" title="Edit Student">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" /></svg>
+                            </button>
+                            <button onClick={() => setPinAction({ action: 'singleDelete', student })} className="text-gray-500 hover:text-red-600 transition-colors" title="Delete Student">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
+                            </button>
+                            </div>
+                        </td>
+                      )}
+                    </tr>
+                  )
+              })}
             </tbody>
           </table>
           {sortedAndFilteredStudents.length === 0 && (

@@ -342,53 +342,55 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
       {/* --- HIDDEN REPORT TEMPLATE --- */}
       <div
         ref={reportRef}
-        className="bg-white p-8 text-gray-900"
+        className="bg-white p-8 text-gray-900 antialiased"
         style={{ 
             width: '210mm', 
             minHeight: '297mm', 
             visibility: 'hidden', 
             position: 'fixed', 
-            top: 0,
+            top: 0, 
             left: '-9999px',
-            zIndex: -10000
+            zIndex: -10000,
+            lineHeight: '1.2', // Fixes vertical drift in html2canvas
+            fontFamily: 'Arial, sans-serif' // Ensures font consistency
         }}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b-2 border-gray-800 pb-4 mb-6">
-             <img src="https://mscnitanp.pages.dev/nitanp_logo.png" alt="Logo" className="h-16" />
+             <img src="https://mscnitanp.pages.dev/nitanp_logo.png" alt="Logo" className="h-16 object-contain" />
              <div className="text-right">
-                 <h1 className="text-xl font-bold uppercase tracking-wider">Student Outing Report</h1>
-                 <p className="text-sm text-gray-600">NIT Andhra Pradesh</p>
+                 <h1 className="text-xl font-bold uppercase tracking-wider leading-none">Student Outing Report</h1>
+                 <p className="text-sm text-gray-600 mt-1">NIT Andhra Pradesh</p>
                  <p className="text-sm font-semibold mt-1">Date: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
              </div>
         </div>
 
         {/* 1. Executive Summary */}
         <div className="mb-8">
-            <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-2 mb-3 uppercase">1. Executive Summary</h3>
+            <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-2 mb-3 uppercase flex items-center">1. Executive Summary</h3>
             <div className="grid grid-cols-4 gap-4">
                 <div className="border border-gray-200 p-3 rounded bg-gray-50">
                     <p className="text-xs text-gray-500 uppercase font-semibold">Total Students</p>
-                    <p className="text-3xl font-bold text-gray-800">{totalStudents}</p>
+                    <p className="text-3xl font-bold text-gray-800 leading-none mt-1">{totalStudents}</p>
                 </div>
                 <div className="border border-yellow-200 p-3 rounded bg-yellow-50">
                     <p className="text-xs text-yellow-700 uppercase font-semibold">Currently Out</p>
-                    <p className="text-3xl font-bold text-yellow-700">{onOutingCount}</p>
+                    <p className="text-3xl font-bold text-yellow-700 leading-none mt-1">{onOutingCount}</p>
                 </div>
                 <div className="border border-red-200 p-3 rounded bg-red-50">
                     <p className="text-xs text-red-700 uppercase font-semibold">Total Overdue</p>
-                    <p className="text-3xl font-bold text-red-700">{overdueLogs.length}</p>
+                    <p className="text-3xl font-bold text-red-700 leading-none mt-1">{overdueLogs.length}</p>
                 </div>
                 <div className="border border-green-200 p-3 rounded bg-green-50">
                     <p className="text-xs text-green-700 uppercase font-semibold">On Campus</p>
-                    <p className="text-3xl font-bold text-green-700">{totalStudents - onOutingCount}</p>
+                    <p className="text-3xl font-bold text-green-700 leading-none mt-1">{totalStudents - onOutingCount}</p>
                 </div>
             </div>
         </div>
 
         {/* 2. Current Demographics */}
         <div className="mb-8">
-             <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-2 mb-4 uppercase">2. Demographics (Currently Out)</h3>
+             <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-2 mb-4 uppercase flex items-center">2. Demographics (Currently Out)</h3>
              <div className="grid grid-cols-2 gap-8">
                  <div>
                      <h4 className="font-bold text-gray-700 mb-2 text-sm text-center uppercase">By Year</h4>
@@ -403,7 +405,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
 
         {/* 3. Overdue Analysis */}
         <div className="mb-8">
-             <h3 className="text-lg font-bold text-red-800 border-l-4 border-red-600 pl-2 mb-4 uppercase">3. Overdue Analysis</h3>
+             <h3 className="text-lg font-bold text-red-800 border-l-4 border-red-600 pl-2 mb-4 uppercase flex items-center">3. Overdue Analysis</h3>
              <div className="grid grid-cols-2 gap-8 mb-6">
                  <div>
                      <h4 className="font-bold text-gray-700 mb-2 text-sm text-center uppercase">Overdue by Year</h4>
@@ -457,7 +459,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
         
         {/* 4. Hostel Occupancy Status */}
         <div className="mb-6">
-             <h3 className="text-lg font-bold text-slate-800 border-l-4 border-slate-600 pl-2 mb-4 uppercase">4. Hostel Occupancy Status</h3>
+             <h3 className="text-lg font-bold text-slate-800 border-l-4 border-slate-600 pl-2 mb-4 uppercase flex items-center">4. Hostel Occupancy Status</h3>
              <table className="w-full border-collapse border border-gray-300 text-xs">
                  <thead className="bg-slate-100">
                      <tr>
