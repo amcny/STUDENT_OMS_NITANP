@@ -11,7 +11,7 @@ import Footer from './components/Footer';
 import Login from './components/Login';
 import { Student, OutingRecord, View, VisitorPassRecord } from './types';
 import { auth } from './firebase'; // Use the centralized instances
-import { onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+import { onAuthStateChanged, signOut, User as FirebaseUser, Unsubscribe } from 'firebase/auth';
 import { onStudentsUpdate, onOutingLogsUpdate, onVisitorLogsUpdate } from './services/firebaseService';
 
 type UserRole = 'admin' | 'security';
@@ -53,13 +53,10 @@ const App: React.FC = () => {
       setIsKioskOnlyMode(true);
     }
 
-    // --- DATA LISTENERS ---
-    // Initialize listeners immediately on mount and keep them active.
-    // The Firestore SDK will automatically retry connections if auth state changes.
-    // Note: Console permission errors are expected while logged out if rules require auth.
-    const unsubscribeStudents = onStudentsUpdate(setStudents);
-    const unsubscribeOutingLogs = onOutingLogsUpdate(setOutingLogs);
-    const unsubscribeVisitorLogs = onVisitorLogsUpdate(setVisitorLogs);
+    // Variables to hold the unsubscribe functions for data listeners
+    let unsubscribeStudents: Unsubscribe | null = null;
+    let unsubscribeOutingLogs: Unsubscribe | null = null;
+    let unsubscribeVisitorLogs: Unsubscribe | null = null;
 
     // --- AUTH LISTENER ---
     const unsubscribeAuth = onAuthStateChanged(auth, (user: FirebaseUser | null) => {
@@ -84,22 +81,52 @@ const App: React.FC = () => {
             }
         }
         
-        // Set auth state now that we have a user.
+        // Set auth state
         setAuthState({ gate: gateName, isLoading: false, role });
+
+        // --- START DATA LISTENERS ---
+        // Only start if they aren't already running
+        if (!unsubscribeStudents) {
+            unsubscribeStudents = onStudentsUpdate(setStudents);
+        }
+        if (!unsubscribeOutingLogs) {
+            unsubscribeOutingLogs = onOutingLogsUpdate(setOutingLogs);
+        }
+        if (!unsubscribeVisitorLogs) {
+            unsubscribeVisitorLogs = onVisitorLogsUpdate(setVisitorLogs);
+        }
 
       } else {
         // --- USER IS LOGGED OUT ---
         setAuthState({ gate: null, isLoading: false, role: null });
-        // We do NOT clear the data here, effectively listening "always" as requested.
+
+        // --- STOP DATA LISTENERS ---
+        if (unsubscribeStudents) {
+            unsubscribeStudents();
+            unsubscribeStudents = null;
+        }
+        if (unsubscribeOutingLogs) {
+            unsubscribeOutingLogs();
+            unsubscribeOutingLogs = null;
+        }
+        if (unsubscribeVisitorLogs) {
+            unsubscribeVisitorLogs();
+            unsubscribeVisitorLogs = null;
+        }
+
+        // Clear local data for security
+        setStudents([]);
+        setOutingLogs([]);
+        setVisitorLogs([]);
       }
     });
 
     // Cleanup function for when the App component unmounts.
     return () => {
       unsubscribeAuth();
-      unsubscribeStudents();
-      unsubscribeOutingLogs();
-      unsubscribeVisitorLogs();
+      if (unsubscribeStudents) unsubscribeStudents();
+      if (unsubscribeOutingLogs) unsubscribeOutingLogs();
+      if (unsubscribeVisitorLogs) unsubscribeVisitorLogs();
     };
   }, []); // Empty dependency array ensures this effect runs only once on mount.
 
