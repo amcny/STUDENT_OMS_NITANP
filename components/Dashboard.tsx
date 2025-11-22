@@ -177,6 +177,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
       return occupancyData;
   }, [students, demographicsOut.byHostel]);
 
+  const hostelOccupancyTotals = useMemo(() => {
+      return hostelOccupancy.reduce((acc, curr) => ({
+          total: acc.total + curr.total,
+          out: acc.out + curr.out,
+          present: acc.present + curr.present
+      }), { total: 0, out: 0, present: 0 });
+  }, [hostelOccupancy]);
+
   // Used for Dashboard Charts (Total activity today)
   const demographicsToday = useMemo(() => {
       return {
@@ -237,14 +245,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
     setIsGeneratingReport(true);
     const dashboardElement = reportRef.current;
     
-    // Save original styles to restore later (though we force specific states)
-    const originalVisibility = dashboardElement.style.visibility;
-    const originalPosition = dashboardElement.style.position;
-    const originalLeft = dashboardElement.style.left;
-    const originalTop = dashboardElement.style.top;
-    const originalZIndex = dashboardElement.style.zIndex;
-
-    // Make visible for capture, but fixed and behind everything to prevent layout shift and user visibility
+    // Prepare element for capture
     dashboardElement.style.visibility = 'visible';
     dashboardElement.style.position = 'fixed';
     dashboardElement.style.left = '0';
@@ -258,6 +259,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
             scale: 2,
             useCORS: true,
             logging: false,
+            scrollY: 0, // Crucial: Prevents vertical shift based on current scroll
+            windowWidth: dashboardElement.scrollWidth,
+            windowHeight: dashboardElement.scrollHeight,
+            onclone: (clonedDoc: any) => {
+                // Ensure the cloned element is at the top
+                const clonedElement = clonedDoc.body.querySelector('#report-container');
+                if(clonedElement) {
+                   clonedElement.style.transform = 'none';
+                }
+            }
         });
 
         const imgData = canvas.toDataURL('image/png');
@@ -270,6 +281,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
 
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
+        
+        // Calculate aspect ratio
         const imgWidth = canvas.width;
         const imgHeight = canvas.height;
         const ratio = imgWidth / imgHeight;
@@ -304,21 +317,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
 
   // Helper to render small distribution tables
   const SimpleTable = ({ data, labelHeader, valueHeader }: { data: Map<string, number>, labelHeader: string, valueHeader: string }) => (
-      <table className="w-full border-collapse border border-gray-300 text-sm">
+      <table className="w-full border-collapse border border-gray-300 text-sm" style={{ tableLayout: 'fixed' }}>
           <thead className="bg-gray-100">
               <tr>
-                  <th className="border border-gray-300 px-3 py-2 text-left font-bold text-gray-700 uppercase text-xs tracking-wider align-middle">{labelHeader}</th>
-                  <th className="border border-gray-300 px-3 py-2 text-right font-bold text-gray-700 uppercase text-xs tracking-wider align-middle">{valueHeader}</th>
+                  <th className="border border-gray-300 px-3 py-1.5 text-left font-bold text-gray-700 uppercase text-xs tracking-wider" style={{ verticalAlign: 'middle' }}>{labelHeader}</th>
+                  <th className="border border-gray-300 px-3 py-1.5 text-right font-bold text-gray-700 uppercase text-xs tracking-wider" style={{ verticalAlign: 'middle' }}>{valueHeader}</th>
               </tr>
           </thead>
           <tbody>
               {Array.from(data.entries()).map(([key, val]) => (
                   <tr key={key} className="even:bg-gray-50">
-                      <td className="border border-gray-300 px-3 py-2 text-gray-800 font-medium align-middle">{key}</td>
-                      <td className="border border-gray-300 px-3 py-2 text-right text-gray-800 font-bold align-middle">{val}</td>
+                      <td className="border border-gray-300 px-3 py-1.5 text-gray-800 font-medium" style={{ verticalAlign: 'middle' }}>{key}</td>
+                      <td className="border border-gray-300 px-3 py-1.5 text-right text-gray-800 font-bold" style={{ verticalAlign: 'middle' }}>{val}</td>
                   </tr>
               ))}
-               {data.size === 0 && <tr><td colSpan={2} className="border border-gray-300 px-3 py-2 text-center text-gray-500 italic align-middle">No data</td></tr>}
+               {data.size === 0 && <tr><td colSpan={2} className="border border-gray-300 px-3 py-1.5 text-center text-gray-500 italic" style={{ verticalAlign: 'middle' }}>No data</td></tr>}
           </tbody>
       </table>
   );
@@ -341,6 +354,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
       
       {/* --- HIDDEN REPORT TEMPLATE --- */}
       <div
+        id="report-container"
         ref={reportRef}
         className="bg-white p-8 text-gray-900 antialiased"
         style={{ 
@@ -351,14 +365,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
             top: 0, 
             left: '-9999px',
             zIndex: -10000,
-            lineHeight: 'normal', // Reset line height for consistency
+            lineHeight: '1.2', 
             fontFamily: 'Arial, sans-serif',
             fontVariant: 'normal',
-            letterSpacing: 'normal'
+            letterSpacing: 'normal',
+            boxSizing: 'border-box',
+            textRendering: 'geometricPrecision', // Helps with text positioning in html2canvas
         }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b-2 border-gray-800 pb-4 mb-6">
+        <div className="flex items-center justify-between border-b-2 border-gray-800 pb-2 mb-4">
              <img src="https://mscnitanp.pages.dev/nitanp_logo.png" alt="Logo" className="h-16 object-contain" />
              <div className="text-right">
                  <h1 className="text-xl font-bold uppercase tracking-wider leading-none">Student Outing Report</h1>
@@ -368,31 +384,31 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
         </div>
 
         {/* 1. Executive Summary */}
-        <div className="mb-8">
-            <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-3 py-1 mb-3 uppercase block leading-none">1. Executive Summary</h3>
+        <div className="mb-6">
+            <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-3 py-1 mb-2 uppercase block leading-none">1. Executive Summary</h3>
             <div className="grid grid-cols-4 gap-4">
-                <div className="border border-gray-200 p-3 rounded bg-gray-50">
-                    <p className="text-xs text-gray-500 uppercase font-semibold">Total Students</p>
-                    <p className="text-3xl font-bold text-gray-800 leading-none mt-1">{totalStudents}</p>
+                <div className="border border-gray-200 p-3 rounded bg-gray-50 flex flex-col justify-center h-20">
+                    <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Total Students</div>
+                    <div className="text-3xl font-bold text-gray-800 leading-none" style={{ lineHeight: '1' }}>{totalStudents}</div>
                 </div>
-                <div className="border border-yellow-200 p-3 rounded bg-yellow-50">
-                    <p className="text-xs text-yellow-700 uppercase font-semibold">Currently Out</p>
-                    <p className="text-3xl font-bold text-yellow-700 leading-none mt-1">{onOutingCount}</p>
+                <div className="border border-yellow-200 p-3 rounded bg-yellow-50 flex flex-col justify-center h-20">
+                    <div className="text-xs text-yellow-700 uppercase font-semibold mb-1">Currently Out</div>
+                    <div className="text-3xl font-bold text-yellow-700 leading-none" style={{ lineHeight: '1' }}>{onOutingCount}</div>
                 </div>
-                <div className="border border-red-200 p-3 rounded bg-red-50">
-                    <p className="text-xs text-red-700 uppercase font-semibold">Total Overdue</p>
-                    <p className="text-3xl font-bold text-red-700 leading-none mt-1">{overdueLogs.length}</p>
+                <div className="border border-red-200 p-3 rounded bg-red-50 flex flex-col justify-center h-20">
+                    <div className="text-xs text-red-700 uppercase font-semibold mb-1">Total Overdue</div>
+                    <div className="text-3xl font-bold text-red-700 leading-none" style={{ lineHeight: '1' }}>{overdueLogs.length}</div>
                 </div>
-                <div className="border border-green-200 p-3 rounded bg-green-50">
-                    <p className="text-xs text-green-700 uppercase font-semibold">On Campus</p>
-                    <p className="text-3xl font-bold text-green-700 leading-none mt-1">{totalStudents - onOutingCount}</p>
+                <div className="border border-green-200 p-3 rounded bg-green-50 flex flex-col justify-center h-20">
+                    <div className="text-xs text-green-700 uppercase font-semibold mb-1">On Campus</div>
+                    <div className="text-3xl font-bold text-green-700 leading-none" style={{ lineHeight: '1' }}>{totalStudents - onOutingCount}</div>
                 </div>
             </div>
         </div>
 
         {/* 2. Current Demographics */}
-        <div className="mb-8">
-             <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-3 py-1 mb-4 uppercase block leading-none">2. Demographics (Currently Out)</h3>
+        <div className="mb-6">
+             <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-3 py-1 mb-3 uppercase block leading-none">2. Demographics (Currently Out)</h3>
              <div className="grid grid-cols-2 gap-8">
                  <div>
                      <h4 className="font-bold text-gray-700 mb-2 text-sm text-center uppercase">By Year</h4>
@@ -406,9 +422,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
         </div>
 
         {/* 3. Overdue Analysis */}
-        <div className="mb-8">
-             <h3 className="text-lg font-bold text-red-800 border-l-4 border-red-600 pl-3 py-1 mb-4 uppercase block leading-none">3. Overdue Analysis</h3>
-             <div className="grid grid-cols-2 gap-8 mb-6">
+        <div className="mb-6">
+             <h3 className="text-lg font-bold text-red-800 border-l-4 border-red-600 pl-3 py-1 mb-3 uppercase block leading-none">3. Overdue Analysis</h3>
+             <div className="grid grid-cols-2 gap-8 mb-4">
                  <div>
                      <h4 className="font-bold text-gray-700 mb-2 text-sm text-center uppercase">Overdue by Year</h4>
                      <SimpleTable data={demographicsOverdue.byYear} labelHeader="Year" valueHeader="Overdue Count" />
@@ -419,16 +435,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                  </div>
              </div>
 
-             <h4 className="font-bold text-gray-800 mb-3 text-sm uppercase border-b border-gray-300 pb-1">Detailed Overdue List ({overdueLogs.length})</h4>
-             <table className="w-full border-collapse border border-gray-300 text-xs">
+             <h4 className="font-bold text-gray-800 mb-2 text-sm uppercase border-b border-gray-300 pb-1">Detailed Overdue List ({overdueLogs.length})</h4>
+             <table className="w-full border-collapse border border-gray-300 text-xs" style={{ tableLayout: 'auto' }}>
                  <thead className="bg-red-50">
                      <tr>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider align-middle">Name</th>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider align-middle">Roll No</th>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider align-middle">Year</th>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider align-middle">Hostel</th>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider align-middle">Out Time</th>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-red-900 uppercase tracking-wider align-middle">Type</th>
+                         <th className="border border-gray-300 px-2 py-1.5 text-left font-bold text-red-900 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Name</th>
+                         <th className="border border-gray-300 px-2 py-1.5 text-left font-bold text-red-900 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Roll No</th>
+                         <th className="border border-gray-300 px-2 py-1.5 text-left font-bold text-red-900 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Year</th>
+                         <th className="border border-gray-300 px-2 py-1.5 text-left font-bold text-red-900 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Hostel</th>
+                         <th className="border border-gray-300 px-2 py-1.5 text-left font-bold text-red-900 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Out Time</th>
+                         <th className="border border-gray-300 px-2 py-1.5 text-left font-bold text-red-900 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Type</th>
                      </tr>
                  </thead>
                  <tbody>
@@ -436,59 +452,66 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                           const s = studentMap.get(log.studentId);
                           return (
                             <tr key={log.id} className="even:bg-gray-50">
-                                <td className="border border-gray-300 px-3 py-2 font-bold text-gray-800 align-middle">{log.studentName}</td>
-                                <td className="border border-gray-300 px-3 py-2 text-gray-700 align-middle">{log.rollNumber}</td>
-                                <td className="border border-gray-300 px-3 py-2 text-gray-700 align-middle">{log.year}</td>
-                                <td className="border border-gray-300 px-3 py-2 text-gray-700 align-middle">{s?.hostel || '-'}</td>
-                                <td className="border border-gray-300 px-3 py-2 text-gray-700 align-middle">{new Date(log.checkOutTime).toLocaleString()}</td>
-                                <td className="border border-gray-300 px-3 py-2 text-gray-700 align-middle">{log.outingType}</td>
+                                <td className="border border-gray-300 px-2 py-1.5 font-bold text-gray-800" style={{ verticalAlign: 'middle' }}>{log.studentName}</td>
+                                <td className="border border-gray-300 px-2 py-1.5 text-gray-700" style={{ verticalAlign: 'middle' }}>{log.rollNumber}</td>
+                                <td className="border border-gray-300 px-2 py-1.5 text-gray-700" style={{ verticalAlign: 'middle' }}>{log.year}</td>
+                                <td className="border border-gray-300 px-2 py-1.5 text-gray-700" style={{ verticalAlign: 'middle' }}>{s?.hostel || '-'}</td>
+                                <td className="border border-gray-300 px-2 py-1.5 text-gray-700" style={{ verticalAlign: 'middle' }}>{new Date(log.checkOutTime).toLocaleString()}</td>
+                                <td className="border border-gray-300 px-2 py-1.5 text-gray-700" style={{ verticalAlign: 'middle' }}>{log.outingType}</td>
                             </tr>
                           );
                      })}
                      {overdueLogs.length > 10 && (
                          <tr>
-                             <td colSpan={6} className="border border-gray-300 px-3 py-2 text-center text-gray-500 italic align-middle">
+                             <td colSpan={6} className="border border-gray-300 px-2 py-1.5 text-center text-gray-500 italic" style={{ verticalAlign: 'middle' }}>
                                  ...and {overdueLogs.length - 10} more students.
                              </td>
                          </tr>
                      )}
                      {overdueLogs.length === 0 && (
-                         <tr><td colSpan={6} className="border border-gray-300 px-3 py-4 text-center text-green-600 font-medium align-middle">No overdue students.</td></tr>
+                         <tr><td colSpan={6} className="border border-gray-300 px-2 py-3 text-center text-green-600 font-medium" style={{ verticalAlign: 'middle' }}>No overdue students.</td></tr>
                      )}
                  </tbody>
              </table>
         </div>
         
         {/* 4. Hostel Occupancy Status */}
-        <div className="mb-6">
-             <h3 className="text-lg font-bold text-slate-800 border-l-4 border-slate-600 pl-3 py-1 mb-4 uppercase block leading-none">4. Hostel Occupancy Status</h3>
+        <div className="mb-4">
+             <h3 className="text-lg font-bold text-slate-800 border-l-4 border-slate-600 pl-3 py-1 mb-3 uppercase block leading-none">4. Hostel Occupancy Status</h3>
              <table className="w-full border-collapse border border-gray-300 text-xs">
                  <thead className="bg-slate-100">
                      <tr>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-gray-700 uppercase tracking-wider align-middle">Hostel Name</th>
-                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-gray-700 uppercase tracking-wider align-middle">Total Registered</th>
-                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-yellow-700 uppercase tracking-wider align-middle">Currently Out</th>
-                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-green-700 uppercase tracking-wider align-middle">Currently Present</th>
+                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-gray-700 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Hostel Name</th>
+                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-gray-700 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Total Registered</th>
+                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-yellow-700 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Currently Out</th>
+                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-green-700 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Currently Present</th>
                      </tr>
                  </thead>
                  <tbody>
                     {hostelOccupancy.map(row => (
                         <tr key={row.hostel} className="even:bg-gray-50">
-                            <td className="border border-gray-300 px-3 py-2 font-bold text-gray-800 align-middle">{row.hostel}</td>
-                            <td className="border border-gray-300 px-3 py-2 text-right text-gray-800 align-middle">{row.total}</td>
-                            <td className="border border-gray-300 px-3 py-2 text-right text-yellow-600 font-semibold align-middle">{row.out}</td>
-                            <td className="border border-gray-300 px-3 py-2 text-right text-green-600 font-bold align-middle">{row.present}</td>
+                            <td className="border border-gray-300 px-3 py-2 font-bold text-gray-800" style={{ verticalAlign: 'middle' }}>{row.hostel}</td>
+                            <td className="border border-gray-300 px-3 py-2 text-right text-gray-800" style={{ verticalAlign: 'middle' }}>{row.total}</td>
+                            <td className="border border-gray-300 px-3 py-2 text-right text-yellow-600 font-semibold" style={{ verticalAlign: 'middle' }}>{row.out}</td>
+                            <td className="border border-gray-300 px-3 py-2 text-right text-green-600 font-bold" style={{ verticalAlign: 'middle' }}>{row.present}</td>
                         </tr>
                     ))}
+                    {/* Total Row */}
+                    <tr className="bg-gray-200 border-t-2 border-gray-400">
+                         <td className="border border-gray-300 px-3 py-2 font-bold text-gray-900 uppercase" style={{ verticalAlign: 'middle' }}>Total</td>
+                         <td className="border border-gray-300 px-3 py-2 text-right font-bold text-gray-900" style={{ verticalAlign: 'middle' }}>{hostelOccupancyTotals.total}</td>
+                         <td className="border border-gray-300 px-3 py-2 text-right font-bold text-yellow-800" style={{ verticalAlign: 'middle' }}>{hostelOccupancyTotals.out}</td>
+                         <td className="border border-gray-300 px-3 py-2 text-right font-bold text-green-800" style={{ verticalAlign: 'middle' }}>{hostelOccupancyTotals.present}</td>
+                    </tr>
                     {hostelOccupancy.length === 0 && (
-                        <tr><td colSpan={4} className="border border-gray-300 px-3 py-4 text-center text-gray-500 italic align-middle">No hostel data available.</td></tr>
+                        <tr><td colSpan={4} className="border border-gray-300 px-3 py-4 text-center text-gray-500 italic" style={{ verticalAlign: 'middle' }}>No hostel data available.</td></tr>
                     )}
                  </tbody>
              </table>
         </div>
         
         {/* Footer */}
-        <div className="mt-auto pt-4 border-t border-gray-400 flex justify-between text-xs text-gray-500">
+        <div className="mt-auto pt-2 border-t border-gray-400 flex justify-between text-xs text-gray-500">
              <p>Generated automatically by Outing Management System</p>
              <p>Page 1 of 1</p>
         </div>
