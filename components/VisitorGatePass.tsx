@@ -7,6 +7,8 @@ import Alert from './Alert';
 import ConfirmationModal from './ConfirmationModal';
 import GatePassPreviewModal from './GatePassPreviewModal';
 import Modal from './Modal';
+import CustomSelect from './CustomSelect';
+import { RELATION_OPTIONS, PERSON_TYPE_OPTIONS, PLACE_TO_VISIT_OPTIONS } from '../constants';
 
 // Allow TypeScript to recognize the XLSX global variable from the script tag
 declare var XLSX: any;
@@ -20,6 +22,7 @@ const INITIAL_FORM_DATA = {
   address: '',
   vehicleNumber: '',
   whomToMeet: '',
+  personType: '',
   placeToVisit: '',
   personToMeetMobile: '',
   purpose: '',
@@ -58,6 +61,9 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
+    // State for controlling the Place dropdown separately from the text value
+    const [placeDropdownValue, setPlaceDropdownValue] = useState('');
+    
     const [filter, setFilter] = useState<'all' | 'inside' | 'departed'>('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'inTime', direction: 'descending' });
@@ -66,12 +72,10 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
     const [logToMarkOut, setLogToMarkOut] = useState<VisitorPassRecord | null>(null);
     const [logToDelete, setLogToDelete] = useState<VisitorPassRecord | null>(null);
     
-    // State to hold the log specifically for the PIN step, ensuring it persists after ConfirmationModal closes
     const [pinAction, setPinAction] = useState<{ action: 'singleDelete'; log: VisitorPassRecord } | { action: 'bulkDelete' } | null>(null);
     const [pinInput, setPinInput] = useState('');
     const [pinError, setPinError] = useState('');
 
-    // Bulk Delete State
     const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
     const [bulkDeleteConfig, setBulkDeleteConfig] = useState<{
         range: '3m' | '6m' | '1y' | 'all';
@@ -87,7 +91,6 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
         }
     }, [notification]);
 
-    // Update logs for bulk deletion based on range
     useEffect(() => {
       if (!isBulkDeleteModalOpen) return;
       const now = new Date();
@@ -108,29 +111,72 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        const uppercaseFields = ['name', 'relation', 'address', 'vehicleNumber', 'whomToMeet', 'placeToVisit', 'purpose'];
+        const uppercaseFields = ['name', 'address', 'vehicleNumber', 'whomToMeet', 'purpose'];
         const processedValue = uppercaseFields.includes(name) ? value.toUpperCase() : value;
         setFormData(prev => ({ ...prev, [name]: processedValue }));
     };
 
+    const handleSelectChange = (name: string, value: string) => {
+        if (name === 'placeToVisit') {
+            setPlaceDropdownValue(value);
+            if (value === 'Others') {
+                setFormData(prev => ({ ...prev, placeToVisit: '' })); // Clear for manual entry
+            } else {
+                setFormData(prev => ({ ...prev, placeToVisit: value }));
+            }
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
+    };
+    
+    const handleCustomPlaceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+         const value = e.target.value.toUpperCase();
+         setFormData(prev => ({ ...prev, placeToVisit: value }));
+    };
+
+    // Helper to get local date string YYYY-MM-DD
+    const getLocalDateString = () => {
+        const now = new Date();
+        const offset = now.getTimezoneOffset() * 60000;
+        const localDate = new Date(now.getTime() - offset);
+        return localDate.toISOString().slice(0, 10);
+    };
+
     const generatePassNumber = () => {
-        const today = new Date();
-        const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-        const todayLogs = visitorLogs.filter(log => log.date === today.toISOString().slice(0, 10));
+        const dateStr = getLocalDateString();
+        const dateStrForId = dateStr.replace(/-/g, '');
+        
+        // Filter by the date string we are using for the ID (local date)
+        // Fix: Firestore stores date as ISO string (timestamp), so we must split to get the date part
+        const todayLogs = visitorLogs.filter(log => {
+            if (!log.date) return false;
+            // Handle both plain date strings and ISO timestamps just in case
+            const logDatePart = log.date.includes('T') ? log.date.split('T')[0] : log.date;
+            return logDatePart === dateStr;
+        });
+        
         const nextId = (todayLogs.length + 1).toString().padStart(3, '0');
-        return `V${dateStr}-${nextId}`;
+        return `V${dateStrForId}-${nextId}`;
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        if (placeDropdownValue === 'Others' && !formData.placeToVisit.trim()) {
+             setNotification({ message: 'Please specify the place to visit.', type: 'error' });
+             return;
+        }
+
         setIsSubmitting(true);
         setNotification(null);
 
         try {
             const now = new Date();
+            const dateStr = getLocalDateString();
+
             const newPassData = {
                 passNumber: generatePassNumber(),
-                date: now.toISOString().slice(0, 10),
+                date: dateStr,
                 inTime: now.toISOString(),
                 outTime: null,
                 gateName: gate,
@@ -138,15 +184,13 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                 ...formData,
             };
             
-            // Show preview immediately using the entered data. 
-            // This prevents issues where the app might fetch an older/incorrect log 
-            // if the database update is slow or if there's an ID collision.
             setPassToPreview({ id: 'new-temp-id', ...newPassData });
 
             await firebaseService.addVisitorLog(newPassData);
             
             setNotification({ message: 'Visitor pass generated successfully!', type: 'success' });
             setFormData(INITIAL_FORM_DATA);
+            setPlaceDropdownValue('');
         } catch (error) {
             console.error("Error generating pass:", error);
             setNotification({ message: 'Failed to generate pass. Please try again.', type: 'error' });
@@ -282,6 +326,7 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                 "Address": log.address,
                 "Vehicle Number": log.vehicleNumber || 'N/A',
                 "Whom to Meet": log.whomToMeet,
+                "Person Type": log.personType,
                 "Person's Mobile": log.personToMeetMobile || 'N/A',
                 "Place to Visit": log.placeToVisit,
                 "Purpose of Visit": log.purpose,
@@ -328,31 +373,58 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
 
     return (
         <div className="space-y-8">
-            <div ref={topRef} className="bg-white p-8 rounded-lg shadow-xl max-w-screen-2xl mx-auto">
+            <div ref={topRef} className="bg-white p-8 rounded-lg shadow-xl max-w-7xl mx-auto">
                 <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Create Visitor Gate Pass</h2>
                 {notification && <div className="mb-6"><Alert message={notification.message} type={notification.type} onClose={() => setNotification(null)} /></div>}
                 
-                <form onSubmit={handleSubmit} className="space-y-8">
-                    <section>
-                        <h3 className="text-xl font-bold text-slate-700 mb-4 border-l-4 border-blue-500 pl-3">Visitor's Details</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4 bg-slate-50 rounded-lg border">
-                            <div><label className="block text-gray-700 font-medium mb-1">Full Name</label><input type="text" name="name" value={formData.name} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
-                            <div><label className="block text-gray-700 font-medium mb-1">Relation</label><input type="text" name="relation" value={formData.relation} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} placeholder="e.g., PARENT, SIBLING, FRIEND"/></div>
-                            <div><label className="block text-gray-700 font-medium mb-1">Mobile Number</label><input type="tel" name="mobileNumber" value={formData.mobileNumber} onChange={handleInputChange} required className={baseFieldClasses} /></div>
-                            <div className="lg:col-span-2"><label className="block text-gray-700 font-medium mb-1">Address</label><input type="text" name="address" value={formData.address} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
-                            <div><label className="block text-gray-700 font-medium mb-1">Vehicle Number (Optional)</label><input type="text" name="vehicleNumber" value={formData.vehicleNumber} onChange={handleInputChange} className={`${baseFieldClasses} uppercase`} /></div>
+                <form onSubmit={handleSubmit}>
+                    <div className="flex flex-col lg:flex-row gap-12">
+                        {/* Left Side: Visitor's Details */}
+                        <div className="lg:w-1/2">
+                            <h3 className="text-xl font-bold text-slate-700 mb-6 border-l-4 border-blue-500 pl-3">Visitor's Details</h3>
+                            <div className="space-y-4">
+                                <div><label className="block text-gray-700 font-medium mb-1">Full Name</label><input type="text" name="name" value={formData.name} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div><label className="block text-gray-700 font-medium mb-1">Mobile Number</label><input type="tel" name="mobileNumber" value={formData.mobileNumber} onChange={handleInputChange} required className={baseFieldClasses} /></div>
+                                    <div><label className="block text-gray-700 font-medium mb-1">Vehicle Number (Optional)</label><input type="text" name="vehicleNumber" value={formData.vehicleNumber} onChange={handleInputChange} className={`${baseFieldClasses} uppercase`} /></div>
+                                </div>
+                                <div><label className="block text-gray-700 font-medium mb-1">Address</label><input type="text" name="address" value={formData.address} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
+                            </div>
                         </div>
-                    </section>
-                    <section>
-                        <h3 className="text-xl font-bold text-slate-700 mb-4 border-l-4 border-blue-500 pl-3">Purpose of Visit</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4 bg-slate-50 rounded-lg border">
-                            <div><label className="block text-gray-700 font-medium mb-1">Whom to Meet</label><input type="text" name="whomToMeet" value={formData.whomToMeet} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
-                            <div><label className="block text-gray-700 font-medium mb-1">Place to Visit</label><input type="text" name="placeToVisit" value={formData.placeToVisit} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
-                            <div><label className="block text-gray-700 font-medium mb-1">Person's Mobile (Optional)</label><input type="tel" name="personToMeetMobile" value={formData.personToMeetMobile} onChange={handleInputChange} className={baseFieldClasses} /></div>
-                            <div className="lg:col-span-3"><label className="block text-gray-700 font-medium mb-1">Purpose</label><textarea name="purpose" value={formData.purpose} onChange={handleInputChange} required rows={3} className={`${baseFieldClasses} uppercase`}></textarea></div>
+
+                        {/* Right Side: Purpose of Visit */}
+                        <div className="lg:w-1/2 lg:border-l lg:pl-12">
+                            <h3 className="text-xl font-bold text-slate-700 mb-6 border-l-4 border-blue-500 pl-3">Purpose of Visit</h3>
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div><label className="block text-gray-700 font-medium mb-1">Whom to Meet</label><input type="text" name="whomToMeet" value={formData.whomToMeet} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
+                                    <div><CustomSelect name="personType" label="Person Type" options={PERSON_TYPE_OPTIONS} value={formData.personType} onChange={handleSelectChange} required /></div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div><CustomSelect name="relation" label="Relation" options={RELATION_OPTIONS} value={formData.relation} onChange={handleSelectChange} required /></div>
+                                    <div><label className="block text-gray-700 font-medium mb-1">Person's Mobile (Optional)</label><input type="tel" name="personToMeetMobile" value={formData.personToMeetMobile} onChange={handleInputChange} className={baseFieldClasses} /></div>
+                                </div>
+                                <div>
+                                    <CustomSelect name="placeToVisit" label="Place to Visit" options={PLACE_TO_VISIT_OPTIONS} value={placeDropdownValue} onChange={handleSelectChange} required />
+                                    {placeDropdownValue === 'Others' && (
+                                        <input 
+                                            type="text" 
+                                            placeholder="Enter place..." 
+                                            value={formData.placeToVisit} 
+                                            onChange={handleCustomPlaceChange} 
+                                            required 
+                                            className={`${baseFieldClasses} uppercase mt-2`} 
+                                        />
+                                    )}
+                                </div>
+                                <div><label className="block text-gray-700 font-medium mb-1">Purpose</label><textarea name="purpose" value={formData.purpose} onChange={handleInputChange} required rows={3} className={`${baseFieldClasses} uppercase`}></textarea></div>
+                            </div>
                         </div>
-                    </section>
-                    <div className="mt-8 border-t pt-6"><button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 transition duration-300 text-lg flex justify-center items-center disabled:bg-blue-400 disabled:cursor-wait">{isSubmitting ? 'Submitting...' : 'Generate & Preview Pass'}</button></div>
+                    </div>
+
+                    <div className="mt-8 border-t pt-6">
+                        <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 transition duration-300 text-lg flex justify-center items-center disabled:bg-blue-400 disabled:cursor-wait">{isSubmitting ? 'Submitting...' : 'Generate & Preview Pass'}</button>
+                    </div>
                 </form>
             </div>
 

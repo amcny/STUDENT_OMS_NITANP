@@ -39,14 +39,17 @@ const PassLayout: React.FC<{ passData: VisitorPassRecord }> = ({ passData }) => 
                         <DetailItem label="Address" value={passData.address} className="col-span-2" />
                     </div>
                      <div>
-                        <DetailItem label="Whom to Meet" value={passData.whomToMeet} />
+                        <div className="grid grid-cols-2 gap-x-4">
+                             <DetailItem label="Whom to Meet" value={passData.whomToMeet} />
+                             <DetailItem label="Person Type" value={passData.personType} />
+                        </div>
                         <DetailItem label="Place to Visit" value={passData.placeToVisit} />
-                         <DetailItem label="Purpose" value={passData.purpose} />
+                        <DetailItem label="Purpose" value={passData.purpose} />
                     </div>
                 </div>
                 <div className="col-span-4 flex flex-col items-start justify-start border-l-2 pl-4 space-y-3">
                    <DetailItem label="Pass Number" value={passData.passNumber} />
-                   <DetailItem label="Date" value={new Date(passData.date).toLocaleDateString('en-IN')} />
+                   {/* Date removed as per request */}
                 </div>
             </div>
         </div>
@@ -69,7 +72,7 @@ const PassLayout: React.FC<{ passData: VisitorPassRecord }> = ({ passData }) => 
                 </div>
                 <div className="text-center">
                     <div className="h-8"></div>
-                    <p className="text-xs border-t border-gray-500 px-8 pt-1">Authorised Signatory</p>
+                    <p className="text-xs border-t border-black px-8 pt-1 text-black font-bold">Authorised Signatory</p>
                 </div>
             </div>
         </footer>
@@ -190,6 +193,7 @@ const GatePassPreviewModal: React.FC<GatePassPreviewModalProps> = ({ isOpen, onC
 
           <div class="section">
             <div class="row"><span class="label">To Meet:</span><span class="value" style="font-weight:bold;">${passData.whomToMeet}</span></div>
+            <div class="row"><span class="label">Type:</span><span class="value">${passData.personType}</span></div>
             <div class="row"><span class="label">Location:</span><span class="value">${passData.placeToVisit}</span></div>
             <div class="row"><span class="label">Purpose:</span><span class="value">${passData.purpose}</span></div>
           </div>

@@ -1,4 +1,6 @@
 
+
+
 export const BRANCH_OPTIONS = [
     'Biotechnology', 'Chemical Engineering', 'Civil Engineering', 
     'Computer Science & Engg.', 'Electrical Engineering', 'Electronics & Communication Engineering', 
@@ -14,4 +16,18 @@ export const BOYS_HOSTELS = [
 ];
 export const GIRLS_HOSTELS = [
     'Krishnaveni', 'Bhima', 'Thungabhadra', 'Ghataprabha', 'Munneru'
+];
+
+export const RELATION_OPTIONS = [
+    'Parent / Sibling', 'Delivery', 'Friend', 'Outsider'
+];
+
+export const PERSON_TYPE_OPTIONS = [
+    'Student', 'Faculty', 'Administration', 'Staff'
+];
+
+export const PLACE_TO_VISIT_OPTIONS = [
+    'Boys Hostel', 'Girls Hostel', 'Y Junction', 'Mess', 
+    'Academic Blocks - SRK/MMM', 'Central Vista/Administration', 
+    'Lab', 'Sports', 'Others'
 ];

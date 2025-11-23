@@ -1,3 +1,5 @@
+
+
 export interface Student {
   id: string;
   name: string;
@@ -48,6 +50,7 @@ export interface VisitorPassRecord {
   address: string;
   vehicleNumber?: string; // Optional
   whomToMeet: string;
+  personType: string;
   placeToVisit: string;
   personToMeetMobile?: string; // Optional
   purpose: string;
