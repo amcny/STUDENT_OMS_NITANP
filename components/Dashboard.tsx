@@ -126,20 +126,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
       return new Map([...dist.entries()].sort());
   };
 
-  const getOverdueDistribution = (logs: OutingRecord[], key: 'year' | 'hostel') => {
-      const dist = new Map<string, number>();
-      logs.forEach(log => {
-          let val = 'Unknown';
-          if (key === 'year') val = log.year;
-          if (key === 'hostel') {
-               const s = studentMap.get(log.studentId);
-               val = s?.hostel || 'Day-Scholar';
-          }
-          dist.set(val, (dist.get(val) || 0) + 1);
-      });
-      return new Map([...dist.entries()].sort());
-  };
-
   // Used for Report (Currently Out)
   const demographicsOut = useMemo(() => {
       return {
@@ -193,13 +179,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
       };
   }, [studentsOutToday]);
 
-  const demographicsOverdue = useMemo(() => {
-      return {
-          byYear: getOverdueDistribution(overdueLogs, 'year'),
-          byHostel: getOverdueDistribution(overdueLogs.filter(l => l.studentType === 'Hosteller'), 'hostel'),
-      };
-  }, [overdueLogs]);
-
 
   // --- Chart Data for Dashboard View ---
 
@@ -245,90 +224,75 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
     setIsGeneratingReport(true);
     const dashboardElement = reportRef.current;
     
-    // Make the element visible for capture, but keep it strictly off-screen.
-    // We do NOT move it to (0,0) to prevent it from flashing on the dashboard.
-    // It is positioned at left: -10000px in the style prop.
+    // Save original styles
+    const originalVisibility = dashboardElement.style.visibility;
+    const originalPosition = dashboardElement.style.position;
+    const originalLeft = dashboardElement.style.left;
+    const originalTop = dashboardElement.style.top;
+    const originalZIndex = dashboardElement.style.zIndex;
+
+    // Position on screen for rendering (behind other elements)
+    // This is required for correct vector rendering by jsPDF.html
     dashboardElement.style.visibility = 'visible';
-    
-    await new Promise(resolve => setTimeout(resolve, 500)); // Allow render
+    dashboardElement.style.position = 'fixed'; 
+    dashboardElement.style.left = '0';
+    dashboardElement.style.top = '0';
+    dashboardElement.style.zIndex = '-1000';
+
+    // Allow time for styles to apply
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     try {
-        const canvas = await html2canvas(dashboardElement, {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            // Ensure full width is captured even if off-screen
-            windowWidth: 210 * 3.78 + 100, 
-            windowHeight: 297 * 3.78 + 100,
-            onclone: (clonedDoc: any) => {
-                const clonedElement = clonedDoc.body.querySelector('#report-container');
-                if(clonedElement) {
-                   // Ensure no transforms interfere
-                   clonedElement.style.transform = 'none';
-                }
+        const { jsPDF } = jspdf;
+        // Create PDF: Portrait, Points unit, A4 format
+        // A4 size in points: 595.28 x 841.89
+        const pdf = new jsPDF('p', 'pt', 'a4');
+        
+        await pdf.html(dashboardElement, {
+            callback: (doc: any) => {
+                doc.save(`Outing_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+                
+                // Cleanup
+                dashboardElement.style.visibility = originalVisibility;
+                dashboardElement.style.position = originalPosition;
+                dashboardElement.style.left = originalLeft;
+                dashboardElement.style.top = originalTop;
+                dashboardElement.style.zIndex = originalZIndex;
+                
+                setIsGeneratingReport(false);
+            },
+            x: 0,
+            y: 0,
+            // 595.28 is the width of A4 in points. This forces the HTML content 
+            // (which is 210mm ~ 794px wide) to scale down to fit the PDF page width.
+            width: 595.28, 
+            windowWidth: 800, // Virtual window width in pixels for CSS layout
+            margin: [0, 0, 0, 0],
+            autoPaging: 'text',
+            html2canvas: {
+                useCORS: true,
+                logging: false,
+                letterRendering: true,
             }
         });
 
-        const imgData = canvas.toDataURL('image/png');
-        const { jsPDF } = jspdf;
-        const pdf = new jsPDF({
-            orientation: 'p',
-            unit: 'mm',
-            format: 'a4',
-        });
-
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
-        
-        // Calculate aspect ratio
-        const imgWidth = canvas.width;
-        const imgHeight = canvas.height;
-        const ratio = imgWidth / imgHeight;
-        
-        let heightInPdf = pdfWidth / ratio;
-        let widthInPdf = pdfWidth;
-        
-        if (heightInPdf > pdfHeight) {
-             const scaleFactor = pdfHeight / heightInPdf;
-             heightInPdf = pdfHeight;
-             widthInPdf = widthInPdf * scaleFactor;
-        }
-
-        pdf.addImage(imgData, 'PNG', 0, 0, widthInPdf, heightInPdf);
-        pdf.save(`Outing_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (error) {
         console.error("Error generating PDF:", error);
         alert("An error occurred while generating the report.");
-    } finally {
-        // Hide it again
-        dashboardElement.style.visibility = 'hidden';
+        
+        // Cleanup on error
+        dashboardElement.style.visibility = originalVisibility;
+        dashboardElement.style.position = originalPosition;
+        dashboardElement.style.left = originalLeft;
+        dashboardElement.style.top = originalTop;
+        dashboardElement.style.zIndex = originalZIndex;
+        
         setIsGeneratingReport(false);
     }
   };
 
   const totalStudents = students.length;
   const onOutingCount = studentsOnOuting.length;
-
-  // Helper to render small distribution tables with stricter styling
-  const SimpleTable = ({ data, labelHeader, valueHeader }: { data: Map<string, number>, labelHeader: string, valueHeader: string }) => (
-      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d1d5db', fontSize: '12px', tableLayout: 'fixed' }}>
-          <thead style={{ backgroundColor: '#f3f4f6' }}>
-              <tr>
-                  <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#374151', textTransform: 'uppercase', verticalAlign: 'middle' }}>{labelHeader}</th>
-                  <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#374151', textTransform: 'uppercase', verticalAlign: 'middle' }}>{valueHeader}</th>
-              </tr>
-          </thead>
-          <tbody>
-              {Array.from(data.entries()).map(([key, val], index) => (
-                  <tr key={key} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                      <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#1f2937', fontWeight: 500, verticalAlign: 'middle' }}>{key}</td>
-                      <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', color: '#1f2937', fontWeight: 'bold', verticalAlign: 'middle' }}>{val}</td>
-                  </tr>
-              ))}
-               {data.size === 0 && <tr><td colSpan={2} style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'center', color: '#6b7280', fontStyle: 'italic', verticalAlign: 'middle' }}>No data</td></tr>}
-          </tbody>
-      </table>
-  );
 
   return (
     <>
@@ -407,78 +371,28 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                 </div>
             </div>
 
-            {/* 2. Current Demographics */}
+            {/* 2. Today's Activity */}
             <div style={{ marginBottom: '32px' }}>
-                 <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e3a8a', borderBottom: '2px solid #1e40af', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>2. Demographics (Currently Out)</h3>
-                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '32px' }}>
-                     <div>
-                         <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>By Year</h4>
-                         <SimpleTable data={demographicsOut.byYear} labelHeader="Year" valueHeader="Students Out" />
-                     </div>
-                     <div>
-                         <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>By Hostel</h4>
-                         <SimpleTable data={demographicsOut.byHostel} labelHeader="Hostel" valueHeader="Students Out" />
-                     </div>
+                 <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e3a8a', borderBottom: '2px solid #1e40af', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>2. Today's Activity</h3>
+                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                    <div style={{ border: '1px solid #0d9488', backgroundColor: '#f0fdfa', borderRadius: '4px', padding: '12px' }}>
+                        <p style={{ fontSize: '10px', color: '#0f766e', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>Local Outings</p>
+                        <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#0f766e', lineHeight: 1, margin: 0, marginTop: '4px' }}>{todaysStats.localOutingsToday}</p>
+                    </div>
+                    <div style={{ border: '1px solid #7c3aed', backgroundColor: '#f5f3ff', borderRadius: '4px', padding: '12px' }}>
+                        <p style={{ fontSize: '10px', color: '#6d28d9', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>Non-Local Outings</p>
+                        <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#6d28d9', lineHeight: 1, margin: 0, marginTop: '4px' }}>{todaysStats.nonLocalOutingsToday}</p>
+                    </div>
+                    <div style={{ border: '1px solid #475569', backgroundColor: '#f8fafc', borderRadius: '4px', padding: '12px' }}>
+                        <p style={{ fontSize: '10px', color: '#334155', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>Visitors Today</p>
+                        <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#334155', lineHeight: 1, margin: 0, marginTop: '4px' }}>{todaysStats.visitorsToday}</p>
+                    </div>
                  </div>
             </div>
 
-            {/* 3. Overdue Analysis */}
+            {/* 3. Hostel Occupancy Status (MOVED UP) */}
             <div style={{ marginBottom: '32px' }}>
-                 <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#991b1b', borderBottom: '2px solid #b91c1c', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>3. Overdue Analysis</h3>
-                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '32px', marginBottom: '16px' }}>
-                     <div>
-                         <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>Overdue by Year</h4>
-                         <SimpleTable data={demographicsOverdue.byYear} labelHeader="Year" valueHeader="Overdue Count" />
-                     </div>
-                     <div>
-                         <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>Overdue by Hostel</h4>
-                         <SimpleTable data={demographicsOverdue.byHostel} labelHeader="Hostel" valueHeader="Overdue Count" />
-                     </div>
-                 </div>
-
-                 <h4 style={{ fontWeight: 'bold', color: '#1f2937', marginBottom: '8px', fontSize: '12px', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db', paddingBottom: '4px' }}>Detailed Overdue List ({overdueLogs.length})</h4>
-                 <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d1d5db', fontSize: '12px' }}>
-                     <thead style={{ backgroundColor: '#fef2f2' }}>
-                         <tr>
-                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Name</th>
-                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Roll No</th>
-                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Year</th>
-                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Hostel</th>
-                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Out Time</th>
-                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Type</th>
-                         </tr>
-                     </thead>
-                     <tbody>
-                         {overdueLogs.slice(0, 10).map((log, index) => {
-                              const s = studentMap.get(log.studentId);
-                              return (
-                                <tr key={log.id} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', fontWeight: 'bold', color: '#1f2937', verticalAlign: 'middle' }}>{log.studentName}</td>
-                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.rollNumber}</td>
-                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.year}</td>
-                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{s?.hostel || '-'}</td>
-                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{new Date(log.checkOutTime).toLocaleString('en-IN')}</td>
-                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.outingType}</td>
-                                </tr>
-                              );
-                         })}
-                         {overdueLogs.length > 10 && (
-                             <tr>
-                                 <td colSpan={6} style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'center', color: '#6b7280', fontStyle: 'italic', verticalAlign: 'middle' }}>
-                                     ...and {overdueLogs.length - 10} more students.
-                                 </td>
-                             </tr>
-                         )}
-                         {overdueLogs.length === 0 && (
-                             <tr><td colSpan={6} style={{ border: '1px solid #d1d5db', padding: '12px', textAlign: 'center', color: '#16a34a', fontWeight: 500, verticalAlign: 'middle' }}>No overdue students.</td></tr>
-                         )}
-                     </tbody>
-                 </table>
-            </div>
-            
-            {/* 4. Hostel Occupancy Status */}
-            <div style={{ marginBottom: '16px' }}>
-                 <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1f2937', borderBottom: '2px solid #4b5563', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>4. Hostel Occupancy Status</h3>
+                 <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1f2937', borderBottom: '2px solid #4b5563', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>3. Hostel Occupancy Status</h3>
                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d1d5db', fontSize: '12px' }}>
                      <thead style={{ backgroundColor: '#f3f4f6' }}>
                          <tr>
@@ -507,6 +421,50 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                         {hostelOccupancy.length === 0 && (
                             <tr><td colSpan={4} style={{ border: '1px solid #d1d5db', padding: '16px', textAlign: 'center', color: '#6b7280', fontStyle: 'italic', verticalAlign: 'middle' }}>No hostel data available.</td></tr>
                         )}
+                     </tbody>
+                 </table>
+            </div>
+
+            {/* 4. Overdue Analysis (MOVED DOWN) */}
+            <div style={{ marginBottom: '16px' }}>
+                 <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#991b1b', borderBottom: '2px solid #b91c1c', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>4. Overdue Analysis</h3>
+                 
+                 <h4 style={{ fontWeight: 'bold', color: '#1f2937', marginBottom: '8px', fontSize: '12px', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db', paddingBottom: '4px' }}>Detailed Overdue List ({overdueLogs.length})</h4>
+                 <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d1d5db', fontSize: '12px' }}>
+                     <thead style={{ backgroundColor: '#fef2f2' }}>
+                         <tr>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Name</th>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Roll No</th>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Year</th>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Hostel</th>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Out Time</th>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Type</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                         {overdueLogs.slice(0, 15).map((log, index) => {
+                              const s = studentMap.get(log.studentId);
+                              return (
+                                <tr key={log.id} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', fontWeight: 'bold', color: '#1f2937', verticalAlign: 'middle' }}>{log.studentName}</td>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.rollNumber}</td>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.year}</td>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{s?.hostel || '-'}</td>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{new Date(log.checkOutTime).toLocaleString('en-IN')}</td>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.outingType}</td>
+                                </tr>
+                              );
+                         })}
+                         {overdueLogs.length > 15 && (
+                             <tr>
+                                 <td colSpan={6} style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'center', color: '#6b7280', fontStyle: 'italic', verticalAlign: 'middle' }}>
+                                     ...and {overdueLogs.length - 15} more students.
+                                 </td>
+                             </tr>
+                         )}
+                         {overdueLogs.length === 0 && (
+                             <tr><td colSpan={6} style={{ border: '1px solid #d1d5db', padding: '12px', textAlign: 'center', color: '#16a34a', fontWeight: 500, verticalAlign: 'middle' }}>No overdue students.</td></tr>
+                         )}
                      </tbody>
                  </table>
             </div>
