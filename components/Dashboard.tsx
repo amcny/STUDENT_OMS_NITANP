@@ -245,12 +245,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
     setIsGeneratingReport(true);
     const dashboardElement = reportRef.current;
     
-    // Prepare element for capture
+    // Make the element visible for capture, but keep it strictly off-screen.
+    // We do NOT move it to (0,0) to prevent it from flashing on the dashboard.
+    // It is positioned at left: -10000px in the style prop.
     dashboardElement.style.visibility = 'visible';
-    dashboardElement.style.position = 'fixed';
-    dashboardElement.style.left = '0';
-    dashboardElement.style.top = '0';
-    dashboardElement.style.zIndex = '50';
     
     await new Promise(resolve => setTimeout(resolve, 500)); // Allow render
 
@@ -259,12 +257,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
             scale: 2,
             useCORS: true,
             logging: false,
-            scrollY: 0, // Crucial: Prevents vertical shift based on current scroll
-            windowWidth: 210 * 3.78, // approx A4 width in pixels
-            windowHeight: 297 * 3.78,
+            // Ensure full width is captured even if off-screen
+            windowWidth: 210 * 3.78 + 100, 
+            windowHeight: 297 * 3.78 + 100,
             onclone: (clonedDoc: any) => {
                 const clonedElement = clonedDoc.body.querySelector('#report-container');
                 if(clonedElement) {
+                   // Ensure no transforms interfere
                    clonedElement.style.transform = 'none';
                 }
             }
@@ -291,7 +290,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
         
         if (heightInPdf > pdfHeight) {
              const scaleFactor = pdfHeight / heightInPdf;
-             heightInPdf = pdfHeight - 20;
+             heightInPdf = pdfHeight;
              widthInPdf = widthInPdf * scaleFactor;
         }
 
@@ -301,12 +300,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
         console.error("Error generating PDF:", error);
         alert("An error occurred while generating the report.");
     } finally {
-        // Restore to hidden state off-screen
+        // Hide it again
         dashboardElement.style.visibility = 'hidden';
-        dashboardElement.style.position = 'fixed'; 
-        dashboardElement.style.left = '-9999px';
-        dashboardElement.style.top = '0';
-        dashboardElement.style.zIndex = '-10000';
         setIsGeneratingReport(false);
     }
   };
@@ -359,166 +354,168 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
             width: '210mm', 
             minHeight: '297mm', 
             backgroundColor: 'white',
-            padding: '20mm',
+            padding: '0mm', // Set to 0 margin for container
             color: '#111827',
             visibility: 'hidden', 
             position: 'fixed', 
             top: 0, 
-            left: '-9999px',
+            left: '-10000px', // Move far off-screen
             zIndex: -10000,
             fontFamily: 'Arial, sans-serif',
             boxSizing: 'border-box',
             textRendering: 'geometricPrecision',
         }}
       >
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #1f2937', paddingBottom: '16px', marginBottom: '24px' }}>
-             <div style={{ display: 'flex', alignItems: 'center' }}>
-                <img src="https://mscnitanp.pages.dev/nitanp_logo.png" alt="Logo" style={{ height: '64px', width: '64px', objectFit: 'contain', marginRight: '16px' }} />
-                <div>
-                    <h1 style={{ fontSize: '18px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: '1.2', margin: 0 }}>National Institute of Technology</h1>
-                    <p style={{ fontSize: '14px', color: '#4b5563', fontWeight: 'bold', textTransform: 'uppercase', margin: 0 }}>Andhra Pradesh</p>
-                </div>
-             </div>
-             <div style={{ textAlign: 'right' }}>
-                 <h2 style={{ fontSize: '18px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#1f2937', margin: 0 }}>Outing Report</h2>
-                 <p style={{ fontSize: '14px', fontWeight: 500, marginTop: '4px', color: '#374151', margin: 0 }}>{new Date().toLocaleDateString('en-IN')}</p>
-                 <p style={{ fontSize: '12px', color: '#4b5563', margin: 0 }}>{new Date().toLocaleTimeString('en-IN')}</p>
-             </div>
-        </div>
+        <div style={{ padding: '10mm', height: '100%' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #1f2937', paddingBottom: '16px', marginBottom: '24px' }}>
+                 <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <img src="https://mscnitanp.pages.dev/nitanp_logo.png" alt="Logo" style={{ height: '64px', width: '64px', objectFit: 'contain', marginRight: '16px' }} />
+                    <div>
+                        <h1 style={{ fontSize: '18px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: '1.2', margin: 0 }}>National Institute of Technology</h1>
+                        <p style={{ fontSize: '14px', color: '#4b5563', fontWeight: 'bold', textTransform: 'uppercase', margin: 0 }}>Andhra Pradesh</p>
+                    </div>
+                 </div>
+                 <div style={{ textAlign: 'right' }}>
+                     <h2 style={{ fontSize: '18px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#1f2937', margin: 0 }}>Outing Report</h2>
+                     <p style={{ fontSize: '14px', fontWeight: 500, marginTop: '4px', color: '#374151', margin: 0 }}>{new Date().toLocaleDateString('en-IN')}</p>
+                     <p style={{ fontSize: '12px', color: '#4b5563', margin: 0 }}>{new Date().toLocaleTimeString('en-IN')}</p>
+                 </div>
+            </div>
 
-        {/* 1. Executive Summary */}
-        <div style={{ marginBottom: '32px' }}>
-            <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e3a8a', borderBottom: '2px solid #1e40af', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>1. Executive Summary</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-                {/* STRICT LAYOUT: Explicit inline styles for reliable rendering */}
-                <div style={{ border: '1px solid #d1d5db', backgroundColor: '#f9fafb', borderRadius: '4px', padding: '12px' }}>
-                    <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>Total Students</p>
-                    <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#111827', lineHeight: 1, margin: 0, marginTop: '4px' }}>{totalStudents}</p>
-                </div>
-                <div style={{ border: '1px solid #fcd34d', backgroundColor: '#fffbeb', borderRadius: '4px', padding: '12px' }}>
-                    <p style={{ fontSize: '10px', color: '#b45309', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>Currently Out</p>
-                    <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#b45309', lineHeight: 1, margin: 0, marginTop: '4px' }}>{onOutingCount}</p>
-                </div>
-                <div style={{ border: '1px solid #fca5a5', backgroundColor: '#fef2f2', borderRadius: '4px', padding: '12px' }}>
-                    <p style={{ fontSize: '10px', color: '#b91c1c', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>Total Overdue</p>
-                    <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#b91c1c', lineHeight: 1, margin: 0, marginTop: '4px' }}>{overdueLogs.length}</p>
-                </div>
-                <div style={{ border: '1px solid #86efac', backgroundColor: '#f0fdf4', borderRadius: '4px', padding: '12px' }}>
-                    <p style={{ fontSize: '10px', color: '#15803d', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>On Campus</p>
-                    <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#15803d', lineHeight: 1, margin: 0, marginTop: '4px' }}>{totalStudents - onOutingCount}</p>
+            {/* 1. Executive Summary */}
+            <div style={{ marginBottom: '32px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e3a8a', borderBottom: '2px solid #1e40af', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>1. Executive Summary</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+                    {/* STRICT LAYOUT: Explicit inline styles for reliable rendering */}
+                    <div style={{ border: '1px solid #d1d5db', backgroundColor: '#f9fafb', borderRadius: '4px', padding: '12px' }}>
+                        <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>Total Students</p>
+                        <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#111827', lineHeight: 1, margin: 0, marginTop: '4px' }}>{totalStudents}</p>
+                    </div>
+                    <div style={{ border: '1px solid #fcd34d', backgroundColor: '#fffbeb', borderRadius: '4px', padding: '12px' }}>
+                        <p style={{ fontSize: '10px', color: '#b45309', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>Currently Out</p>
+                        <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#b45309', lineHeight: 1, margin: 0, marginTop: '4px' }}>{onOutingCount}</p>
+                    </div>
+                    <div style={{ border: '1px solid #fca5a5', backgroundColor: '#fef2f2', borderRadius: '4px', padding: '12px' }}>
+                        <p style={{ fontSize: '10px', color: '#b91c1c', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>Total Overdue</p>
+                        <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#b91c1c', lineHeight: 1, margin: 0, marginTop: '4px' }}>{overdueLogs.length}</p>
+                    </div>
+                    <div style={{ border: '1px solid #86efac', backgroundColor: '#f0fdf4', borderRadius: '4px', padding: '12px' }}>
+                        <p style={{ fontSize: '10px', color: '#15803d', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>On Campus</p>
+                        <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#15803d', lineHeight: 1, margin: 0, marginTop: '4px' }}>{totalStudents - onOutingCount}</p>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        {/* 2. Current Demographics */}
-        <div style={{ marginBottom: '32px' }}>
-             <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e3a8a', borderBottom: '2px solid #1e40af', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>2. Demographics (Currently Out)</h3>
-             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '32px' }}>
-                 <div>
-                     <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>By Year</h4>
-                     <SimpleTable data={demographicsOut.byYear} labelHeader="Year" valueHeader="Students Out" />
+            {/* 2. Current Demographics */}
+            <div style={{ marginBottom: '32px' }}>
+                 <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e3a8a', borderBottom: '2px solid #1e40af', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>2. Demographics (Currently Out)</h3>
+                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '32px' }}>
+                     <div>
+                         <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>By Year</h4>
+                         <SimpleTable data={demographicsOut.byYear} labelHeader="Year" valueHeader="Students Out" />
+                     </div>
+                     <div>
+                         <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>By Hostel</h4>
+                         <SimpleTable data={demographicsOut.byHostel} labelHeader="Hostel" valueHeader="Students Out" />
+                     </div>
                  </div>
-                 <div>
-                     <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>By Hostel</h4>
-                     <SimpleTable data={demographicsOut.byHostel} labelHeader="Hostel" valueHeader="Students Out" />
-                 </div>
-             </div>
-        </div>
+            </div>
 
-        {/* 3. Overdue Analysis */}
-        <div style={{ marginBottom: '32px' }}>
-             <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#991b1b', borderBottom: '2px solid #b91c1c', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>3. Overdue Analysis</h3>
-             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '32px', marginBottom: '16px' }}>
-                 <div>
-                     <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>Overdue by Year</h4>
-                     <SimpleTable data={demographicsOverdue.byYear} labelHeader="Year" valueHeader="Overdue Count" />
+            {/* 3. Overdue Analysis */}
+            <div style={{ marginBottom: '32px' }}>
+                 <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#991b1b', borderBottom: '2px solid #b91c1c', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>3. Overdue Analysis</h3>
+                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '32px', marginBottom: '16px' }}>
+                     <div>
+                         <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>Overdue by Year</h4>
+                         <SimpleTable data={demographicsOverdue.byYear} labelHeader="Year" valueHeader="Overdue Count" />
+                     </div>
+                     <div>
+                         <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>Overdue by Hostel</h4>
+                         <SimpleTable data={demographicsOverdue.byHostel} labelHeader="Hostel" valueHeader="Overdue Count" />
+                     </div>
                  </div>
-                 <div>
-                     <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>Overdue by Hostel</h4>
-                     <SimpleTable data={demographicsOverdue.byHostel} labelHeader="Hostel" valueHeader="Overdue Count" />
-                 </div>
-             </div>
 
-             <h4 style={{ fontWeight: 'bold', color: '#1f2937', marginBottom: '8px', fontSize: '12px', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db', paddingBottom: '4px' }}>Detailed Overdue List ({overdueLogs.length})</h4>
-             <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d1d5db', fontSize: '12px' }}>
-                 <thead style={{ backgroundColor: '#fef2f2' }}>
-                     <tr>
-                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Name</th>
-                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Roll No</th>
-                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Year</th>
-                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Hostel</th>
-                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Out Time</th>
-                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Type</th>
-                     </tr>
-                 </thead>
-                 <tbody>
-                     {overdueLogs.slice(0, 10).map((log, index) => {
-                          const s = studentMap.get(log.studentId);
-                          return (
-                            <tr key={log.id} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                                <td style={{ border: '1px solid #d1d5db', padding: '6px', fontWeight: 'bold', color: '#1f2937', verticalAlign: 'middle' }}>{log.studentName}</td>
-                                <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.rollNumber}</td>
-                                <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.year}</td>
-                                <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{s?.hostel || '-'}</td>
-                                <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{new Date(log.checkOutTime).toLocaleString('en-IN')}</td>
-                                <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.outingType}</td>
-                            </tr>
-                          );
-                     })}
-                     {overdueLogs.length > 10 && (
+                 <h4 style={{ fontWeight: 'bold', color: '#1f2937', marginBottom: '8px', fontSize: '12px', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db', paddingBottom: '4px' }}>Detailed Overdue List ({overdueLogs.length})</h4>
+                 <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d1d5db', fontSize: '12px' }}>
+                     <thead style={{ backgroundColor: '#fef2f2' }}>
                          <tr>
-                             <td colSpan={6} style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'center', color: '#6b7280', fontStyle: 'italic', verticalAlign: 'middle' }}>
-                                 ...and {overdueLogs.length - 10} more students.
-                             </td>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Name</th>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Roll No</th>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Year</th>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Hostel</th>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Out Time</th>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Type</th>
                          </tr>
-                     )}
-                     {overdueLogs.length === 0 && (
-                         <tr><td colSpan={6} style={{ border: '1px solid #d1d5db', padding: '12px', textAlign: 'center', color: '#16a34a', fontWeight: 500, verticalAlign: 'middle' }}>No overdue students.</td></tr>
-                     )}
-                 </tbody>
-             </table>
-        </div>
-        
-        {/* 4. Hostel Occupancy Status */}
-        <div style={{ marginBottom: '16px' }}>
-             <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1f2937', borderBottom: '2px solid #4b5563', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>4. Hostel Occupancy Status</h3>
-             <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d1d5db', fontSize: '12px' }}>
-                 <thead style={{ backgroundColor: '#f3f4f6' }}>
-                     <tr>
-                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#374151', textTransform: 'uppercase', verticalAlign: 'middle' }}>Hostel Name</th>
-                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#374151', textTransform: 'uppercase', verticalAlign: 'middle' }}>Total Registered</th>
-                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#b45309', textTransform: 'uppercase', verticalAlign: 'middle' }}>Currently Out</th>
-                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#15803d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Currently Present</th>
-                     </tr>
-                 </thead>
-                 <tbody>
-                    {hostelOccupancy.map((row, index) => (
-                        <tr key={row.hostel} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                            <td style={{ border: '1px solid #d1d5db', padding: '6px', fontWeight: 'bold', color: '#1f2937', verticalAlign: 'middle' }}>{row.hostel}</td>
-                            <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', color: '#1f2937', verticalAlign: 'middle' }}>{row.total}</td>
-                            <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', color: '#d97706', fontWeight: 600, verticalAlign: 'middle' }}>{row.out}</td>
-                            <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', color: '#16a34a', fontWeight: 'bold', verticalAlign: 'middle' }}>{row.present}</td>
+                     </thead>
+                     <tbody>
+                         {overdueLogs.slice(0, 10).map((log, index) => {
+                              const s = studentMap.get(log.studentId);
+                              return (
+                                <tr key={log.id} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', fontWeight: 'bold', color: '#1f2937', verticalAlign: 'middle' }}>{log.studentName}</td>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.rollNumber}</td>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.year}</td>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{s?.hostel || '-'}</td>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{new Date(log.checkOutTime).toLocaleString('en-IN')}</td>
+                                    <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.outingType}</td>
+                                </tr>
+                              );
+                         })}
+                         {overdueLogs.length > 10 && (
+                             <tr>
+                                 <td colSpan={6} style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'center', color: '#6b7280', fontStyle: 'italic', verticalAlign: 'middle' }}>
+                                     ...and {overdueLogs.length - 10} more students.
+                                 </td>
+                             </tr>
+                         )}
+                         {overdueLogs.length === 0 && (
+                             <tr><td colSpan={6} style={{ border: '1px solid #d1d5db', padding: '12px', textAlign: 'center', color: '#16a34a', fontWeight: 500, verticalAlign: 'middle' }}>No overdue students.</td></tr>
+                         )}
+                     </tbody>
+                 </table>
+            </div>
+            
+            {/* 4. Hostel Occupancy Status */}
+            <div style={{ marginBottom: '16px' }}>
+                 <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1f2937', borderBottom: '2px solid #4b5563', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>4. Hostel Occupancy Status</h3>
+                 <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d1d5db', fontSize: '12px' }}>
+                     <thead style={{ backgroundColor: '#f3f4f6' }}>
+                         <tr>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#374151', textTransform: 'uppercase', verticalAlign: 'middle' }}>Hostel Name</th>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#374151', textTransform: 'uppercase', verticalAlign: 'middle' }}>Total Registered</th>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#b45309', textTransform: 'uppercase', verticalAlign: 'middle' }}>Currently Out</th>
+                             <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#15803d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Currently Present</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                        {hostelOccupancy.map((row, index) => (
+                            <tr key={row.hostel} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                                <td style={{ border: '1px solid #d1d5db', padding: '6px', fontWeight: 'bold', color: '#1f2937', verticalAlign: 'middle' }}>{row.hostel}</td>
+                                <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', color: '#1f2937', verticalAlign: 'middle' }}>{row.total}</td>
+                                <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', color: '#d97706', fontWeight: 600, verticalAlign: 'middle' }}>{row.out}</td>
+                                <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', color: '#16a34a', fontWeight: 'bold', verticalAlign: 'middle' }}>{row.present}</td>
+                            </tr>
+                        ))}
+                        {/* Total Row */}
+                        <tr style={{ backgroundColor: '#e5e7eb', borderTop: '2px solid #9ca3af' }}>
+                             <td style={{ border: '1px solid #d1d5db', padding: '6px', fontWeight: 'bold', color: '#111827', textTransform: 'uppercase', verticalAlign: 'middle' }}>Total</td>
+                             <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#111827', verticalAlign: 'middle' }}>{hostelOccupancyTotals.total}</td>
+                             <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#92400e', verticalAlign: 'middle' }}>{hostelOccupancyTotals.out}</td>
+                             <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#166534', verticalAlign: 'middle' }}>{hostelOccupancyTotals.present}</td>
                         </tr>
-                    ))}
-                    {/* Total Row */}
-                    <tr style={{ backgroundColor: '#e5e7eb', borderTop: '2px solid #9ca3af' }}>
-                         <td style={{ border: '1px solid #d1d5db', padding: '6px', fontWeight: 'bold', color: '#111827', textTransform: 'uppercase', verticalAlign: 'middle' }}>Total</td>
-                         <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#111827', verticalAlign: 'middle' }}>{hostelOccupancyTotals.total}</td>
-                         <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#92400e', verticalAlign: 'middle' }}>{hostelOccupancyTotals.out}</td>
-                         <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#166534', verticalAlign: 'middle' }}>{hostelOccupancyTotals.present}</td>
-                    </tr>
-                    {hostelOccupancy.length === 0 && (
-                        <tr><td colSpan={4} style={{ border: '1px solid #d1d5db', padding: '16px', textAlign: 'center', color: '#6b7280', fontStyle: 'italic', verticalAlign: 'middle' }}>No hostel data available.</td></tr>
-                    )}
-                 </tbody>
-             </table>
-        </div>
-        
-        {/* Footer */}
-        <div style={{ marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #9ca3af', display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280' }}>
-             <p style={{ margin: 0 }}>Generated automatically by Outing Management System</p>
-             <p style={{ margin: 0 }}>Page 1 of 1</p>
+                        {hostelOccupancy.length === 0 && (
+                            <tr><td colSpan={4} style={{ border: '1px solid #d1d5db', padding: '16px', textAlign: 'center', color: '#6b7280', fontStyle: 'italic', verticalAlign: 'middle' }}>No hostel data available.</td></tr>
+                        )}
+                     </tbody>
+                 </table>
+            </div>
+            
+            {/* Footer */}
+            <div style={{ marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #9ca3af', display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280' }}>
+                 <p style={{ margin: 0 }}>Generated automatically by Outing Management System</p>
+                 <p style={{ margin: 0 }}>Page 1 of 1</p>
+            </div>
         </div>
       </div>
       {/* --- END REPORT TEMPLATE --- */}
