@@ -248,3 +248,11 @@ export const updateVisitorLog = async (logId: string, logData: Partial<VisitorPa
 export const deleteVisitorLog = async (logId: string) => {
     await deleteDoc(doc(db, 'visitorLogs', logId));
 };
+
+export const deleteVisitorLogsBatch = async (logIds: string[]) => {
+    const batch = writeBatch(db);
+    logIds.forEach(id => {
+        batch.delete(doc(db, 'visitorLogs', id));
+    });
+    await batch.commit();
+};

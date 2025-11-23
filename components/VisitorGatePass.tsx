@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { VisitorPassRecord } from '../types';
@@ -52,7 +53,7 @@ interface VisitorGatePassProps {
 }
 
 const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
-    const { visitorLogs } = useContext(AppContext);
+    const { visitorLogs, role } = useContext(AppContext);
     const [formData, setFormData] = useState(INITIAL_FORM_DATA);
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,9 +66,18 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
     const [logToMarkOut, setLogToMarkOut] = useState<VisitorPassRecord | null>(null);
     const [logToDelete, setLogToDelete] = useState<VisitorPassRecord | null>(null);
     
-    const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+    // State to hold the log specifically for the PIN step, ensuring it persists after ConfirmationModal closes
+    const [pinAction, setPinAction] = useState<{ action: 'singleDelete'; log: VisitorPassRecord } | { action: 'bulkDelete' } | null>(null);
     const [pinInput, setPinInput] = useState('');
     const [pinError, setPinError] = useState('');
+
+    // Bulk Delete State
+    const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+    const [bulkDeleteConfig, setBulkDeleteConfig] = useState<{
+        range: '3m' | '6m' | '1y' | 'all';
+        logs: VisitorPassRecord[];
+        hasExported: boolean;
+    }>({ range: '3m', logs: [], hasExported: false });
 
     const topRef = useRef<HTMLDivElement>(null);
     
@@ -76,6 +86,25 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
             topRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }, [notification]);
+
+    // Update logs for bulk deletion based on range
+    useEffect(() => {
+      if (!isBulkDeleteModalOpen) return;
+      const now = new Date();
+      const getCutoffDate = (range: string): Date | null => {
+          const cutoff = new Date(now);
+          switch (range) {
+              case '3m': cutoff.setMonth(now.getMonth() - 3); return cutoff;
+              case '6m': cutoff.setMonth(now.getMonth() - 6); return cutoff;
+              case '1y': cutoff.setFullYear(now.getFullYear() - 1); return cutoff;
+              case 'all': return null;
+              default: return new Date();
+          }
+      };
+      const cutoffDate = getCutoffDate(bulkDeleteConfig.range);
+      const logsToPurge = cutoffDate === null ? visitorLogs : visitorLogs.filter(log => new Date(log.inTime) < cutoffDate);
+      setBulkDeleteConfig(prev => ({ ...prev, logs: logsToPurge, hasExported: false }));
+    }, [isBulkDeleteModalOpen, bulkDeleteConfig.range, visitorLogs]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -111,7 +140,6 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
             await firebaseService.addVisitorLog(newPassData);
             
             // The listener will add it to the state, but we need the pass to preview it.
-            // A small delay to allow the listener to potentially update the state with the ID.
             setTimeout(() => {
                 const createdPass = visitorLogs.find(log => log.passNumber === newPassData.passNumber);
                 setPassToPreview(createdPass || {id: 'preview', ...newPassData});
@@ -147,7 +175,16 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
     };
     
     const handleProceedToPin = () => {
-        setIsPinModalOpen(true);
+        if (logToDelete) {
+            setPinAction({ action: 'singleDelete', log: logToDelete });
+        }
+    };
+
+    const handleBulkDeleteProceedToPin = () => {
+        setPinAction({ action: 'bulkDelete' });
+        setIsBulkDeleteModalOpen(false);
+        setPinError('');
+        setPinInput('');
     };
 
     const handlePinVerify = async () => {
@@ -157,20 +194,30 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
             return;
         }
         
-        if (logToDelete) {
-            await firebaseService.deleteVisitorLog(logToDelete.id);
-            setNotification({ message: `Visitor log for ${logToDelete.name} deleted successfully.`, type: 'success' });
-        }
+        if (!pinAction) return;
         
-        setLogToDelete(null);
-        setIsPinModalOpen(false);
-        setPinInput('');
-        setPinError('');
+        try {
+            if (pinAction.action === 'singleDelete') {
+                await firebaseService.deleteVisitorLog(pinAction.log.id);
+                setNotification({ message: `Visitor log for ${pinAction.log.name} deleted successfully.`, type: 'success' });
+            } else if (pinAction.action === 'bulkDelete') {
+                const idsToDelete = bulkDeleteConfig.logs.map(log => log.id);
+                await firebaseService.deleteVisitorLogsBatch(idsToDelete);
+                setBulkDeleteConfig({ range: '3m', logs: [], hasExported: false });
+                setNotification({ message: `${idsToDelete.length} visitor logs deleted successfully.`, type: 'success' });
+            }
+        } catch (error) {
+            console.error("Failed to delete log:", error);
+            setNotification({ message: 'Failed to delete visitor log(s). You may not have permission.', type: 'error' });
+        } finally {
+            setPinAction(null);
+            setPinInput('');
+            setPinError('');
+        }
     };
     
     const handleClosePinModal = () => {
-        setIsPinModalOpen(false);
-        setLogToDelete(null);
+        setPinAction(null);
         setPinInput('');
         setPinError('');
     };
@@ -213,14 +260,19 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
           });
     }, [visitorLogs, filter, searchTerm, sortConfig]);
     
-    const handleExportToExcel = () => {
+    const exportVisitorLogs = (logsToExport: VisitorPassRecord[], fileName: string) => {
         if (typeof XLSX === 'undefined') {
             console.error("XLSX library is not loaded.");
             window.alert("Could not export to Excel. The required library is missing.");
-            return;
+            return false;
         }
 
-        const dataToExport = sortedAndFilteredLogs.map(log => {
+        if (logsToExport.length === 0) {
+            window.alert("No data to export.");
+            return false;
+        }
+
+        const dataToExport = logsToExport.map(log => {
             return {
                 "Pass Number": log.passNumber,
                 "Date": new Date(log.date).toLocaleDateString(),
@@ -241,11 +293,6 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
             };
         });
 
-        if (dataToExport.length === 0) {
-            window.alert("No data to export.");
-            return;
-        }
-
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Visitor Logs");
@@ -258,7 +305,22 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
         }));
         worksheet["!cols"] = colWidths;
 
-        XLSX.writeFile(workbook, "Visitor_Logbook.xlsx");
+        XLSX.writeFile(workbook, fileName);
+        return true;
+    };
+
+    const handleExportToExcel = () => {
+        exportVisitorLogs(sortedAndFilteredLogs, "Visitor_Logbook.xlsx");
+    };
+
+    const handleExportForDeletion = () => {
+        const success = exportVisitorLogs(
+            bulkDeleteConfig.logs,
+            `DELETION_EXPORT_VisitorLogs_${new Date().toISOString().slice(0, 10)}.xlsx`
+        );
+        if (success) {
+            setBulkDeleteConfig(prev => ({ ...prev, hasExported: true }));
+        }
     };
 
 
@@ -314,6 +376,16 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                         </svg>
                         <span>Export</span>
                     </button>
+                    {role === 'admin' && (
+                        <button
+                            onClick={() => setIsBulkDeleteModalOpen(true)}
+                            className="flex-shrink-0 flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
+                            title="Bulk delete old logs"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
+                            <span>Bulk Delete</span>
+                        </button>
+                    )}
                   </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -348,7 +420,9 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                                         <div className="flex items-center space-x-4">
                                             {!log.outTime && <button onClick={() => setLogToMarkOut(log)} className="text-green-600 hover:text-green-900" title="Mark as Out">✓ Out</button>}
                                             <button onClick={() => setPassToPreview(log)} className="text-blue-600 hover:text-blue-900" title="Reprint Pass">🖨️ Print</button>
-                                            <button onClick={() => setLogToDelete(log)} className="text-red-600 hover:text-red-900" title="Delete Log">🗑️ Delete</button>
+                                            {role === 'admin' && (
+                                                <button onClick={() => setLogToDelete(log)} className="text-red-600 hover:text-red-900" title="Delete Log">🗑️ Delete</button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
@@ -364,17 +438,104 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
             <ConfirmationModal isOpen={!!logToMarkOut} onClose={() => setLogToMarkOut(null)} onConfirm={handleConfirmMarkOut} title="Confirm Departure" message={<span>Are you sure you want to mark <strong>{logToMarkOut?.name}</strong> as departed?</span>} confirmButtonText="Confirm" confirmButtonClassName="bg-green-600 hover:bg-green-700" />
             
             <ConfirmationModal 
-                isOpen={!!logToDelete && !isPinModalOpen} 
+                isOpen={!!logToDelete} 
                 onClose={() => setLogToDelete(null)} 
                 onConfirm={handleProceedToPin} 
                 title="Delete Visitor Log" 
                 message={<span>Are you sure you want to delete the pass for <strong>{logToDelete?.name}</strong>? This action cannot be undone.</span>} 
             />
+
+            <Modal isOpen={isBulkDeleteModalOpen} onClose={() => setIsBulkDeleteModalOpen(false)} title="Bulk Visitor Log Deletion">
+              <div className="space-y-6">
+                  <div>
+                      <div className="flex items-center space-x-3 mb-3">
+                          <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white font-bold rounded-full text-lg">1</span>
+                          <h4 className="font-semibold text-xl text-gray-800">Select Deletion Range</h4>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {(['3m', '6m', '1y', 'all'] as const).map(range => {
+                              const descriptions = { '3m': 'Older than 3 months', '6m': 'Older than 6 months', '1y': 'Older than 1 year', 'all': 'All logs' };
+                              return (
+                                  <label key={range} className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 ${bulkDeleteConfig.range === range ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-50 border-gray-300'}`}>
+                                      <input
+                                          type="radio"
+                                          name="deleteRange"
+                                          value={range}
+                                          checked={bulkDeleteConfig.range === range}
+                                          onChange={() => setBulkDeleteConfig(prev => ({ ...prev, range }))}
+                                          className="sr-only"
+                                      />
+                                      <span className="font-semibold text-gray-800">{descriptions[range]}</span>
+                                  </label>
+                              );
+                          })}
+                      </div>
+                      <div className="mt-4 p-4 bg-red-50 border-l-4 border-red-400 rounded-r-lg">
+                        <div className="flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-3 flex-shrink-0 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.03-1.742 3.03H4.42c-1.532 0-2.492-1.696-1.742-3.03l5.58-9.92zM10 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            <p className="text-lg font-semibold text-red-800">
+                                This will permanently delete <strong className="font-bold text-red-900">{bulkDeleteConfig.logs.length}</strong> visitor log record(s).
+                            </p>
+                        </div>
+                      </div>
+                  </div>
+                  <div>
+                      <div className="flex items-center space-x-3 mb-3">
+                          <span className={`flex items-center justify-center w-8 h-8 font-bold rounded-full text-lg ${bulkDeleteConfig.logs.length > 0 ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>2</span>
+                          <h4 className="font-semibold text-xl text-gray-800">Export for Archiving (Required)</h4>
+                      </div>
+                      <div className="p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 rounded-r-lg">
+                          <div className="flex items-start">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.03-1.742 3.03H4.42c-1.532 0-2.492-1.696-1.742-3.03l5.58-9.92zM10 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                              <div>
+                                  <h4 className="font-bold">Important!</h4>
+                                  <p className="text-sm">Once logs are deleted, they cannot be recovered. You must export the data for your records before proceeding.</p>
+                              </div>
+                          </div>
+                      </div>
+                      <button 
+                          onClick={handleExportForDeletion} 
+                          disabled={bulkDeleteConfig.logs.length === 0}
+                          className="mt-3 w-full bg-green-600 text-white font-semibold py-3 px-4 rounded-md hover:bg-green-700 transition disabled:bg-gray-400 flex items-center justify-center space-x-2"
+                      >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                              <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2V7a5 5 0 00-5-5zm0 2a3 3 0 013 3v2H7V7a3 3 0 013-3z" />
+                          </svg>
+                          <span>Export {bulkDeleteConfig.logs.length} Records</span>
+                      </button>
+                  </div>
+                  <div>
+                      <div className="flex items-center space-x-3 mb-3">
+                          <span className={`flex items-center justify-center w-8 h-8 font-bold rounded-full text-lg ${bulkDeleteConfig.hasExported ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>3</span>
+                          <h4 className="font-semibold text-xl text-gray-800">Confirm Deletion</h4>
+                      </div>
+                      <button 
+                          onClick={handleBulkDeleteProceedToPin} 
+                          disabled={!bulkDeleteConfig.hasExported || bulkDeleteConfig.logs.length === 0}
+                          className="w-full bg-red-600 text-white font-semibold py-3 px-4 rounded-md hover:bg-red-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                          title={!bulkDeleteConfig.hasExported ? "Please export the logs first" : ""}
+                      >
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                               <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
+                           </svg>
+                           <span>Proceed to Delete...</span>
+                      </button>
+                  </div>
+              </div>
+            </Modal>
             
-            <Modal isOpen={isPinModalOpen} onClose={handleClosePinModal} title="Security Verification" size="sm">
+            <Modal isOpen={!!pinAction} onClose={handleClosePinModal} title="Security Verification" size="sm">
                 <div className="space-y-4">
                     <p className="text-gray-700 text-center">
-                        To confirm deletion of this visitor log, please enter the security PIN.
+                        {pinAction?.action === 'singleDelete' ? (
+                            <span>To confirm deletion of this visitor log, please enter the security PIN.</span>
+                        ) : (
+                            <span>To confirm the deletion of <strong className="text-red-600">{bulkDeleteConfig.logs.length}</strong> visitor log(s), please enter the security PIN.</span>
+                        )}
                     </p>
                     <input 
                         type="password"
@@ -388,8 +549,8 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                     {pinError && <p className="text-red-500 text-sm text-center">{pinError}</p>}
                     <div className="flex justify-end space-x-4 pt-4">
                         <button onClick={handleClosePinModal} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold">Cancel</button>
-                        <button onClick={handlePinVerify} className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold">
-                            Verify & Delete
+                        <button onClick={handlePinVerify} className={`px-6 py-2 text-white rounded-lg hover:bg-red-700 font-semibold ${pinAction?.action === 'singleDelete' ? 'bg-red-600' : 'bg-red-600'}`}>
+                            {pinAction?.action === 'singleDelete' ? 'Verify & Delete' : 'Confirm & Delete'}
                         </button>
                     </div>
                 </div>

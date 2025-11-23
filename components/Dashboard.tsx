@@ -250,7 +250,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
     dashboardElement.style.position = 'fixed';
     dashboardElement.style.left = '0';
     dashboardElement.style.top = '0';
-    dashboardElement.style.zIndex = '-10000';
+    dashboardElement.style.zIndex = '50';
     
     await new Promise(resolve => setTimeout(resolve, 500)); // Allow render
 
@@ -260,10 +260,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
             useCORS: true,
             logging: false,
             scrollY: 0, // Crucial: Prevents vertical shift based on current scroll
-            windowWidth: dashboardElement.scrollWidth,
-            windowHeight: dashboardElement.scrollHeight,
+            windowWidth: 210 * 3.78, // approx A4 width in pixels
+            windowHeight: 297 * 3.78,
             onclone: (clonedDoc: any) => {
-                // Ensure the cloned element is at the top
                 const clonedElement = clonedDoc.body.querySelector('#report-container');
                 if(clonedElement) {
                    clonedElement.style.transform = 'none';
@@ -315,23 +314,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
   const totalStudents = students.length;
   const onOutingCount = studentsOnOuting.length;
 
-  // Helper to render small distribution tables
+  // Helper to render small distribution tables with stricter styling
   const SimpleTable = ({ data, labelHeader, valueHeader }: { data: Map<string, number>, labelHeader: string, valueHeader: string }) => (
-      <table className="w-full border-collapse border border-gray-300 text-sm" style={{ tableLayout: 'fixed' }}>
-          <thead className="bg-gray-100">
+      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d1d5db', fontSize: '12px', tableLayout: 'fixed' }}>
+          <thead style={{ backgroundColor: '#f3f4f6' }}>
               <tr>
-                  <th className="border border-gray-300 px-3 py-1.5 text-left font-bold text-gray-700 uppercase text-xs tracking-wider" style={{ verticalAlign: 'middle' }}>{labelHeader}</th>
-                  <th className="border border-gray-300 px-3 py-1.5 text-right font-bold text-gray-700 uppercase text-xs tracking-wider" style={{ verticalAlign: 'middle' }}>{valueHeader}</th>
+                  <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#374151', textTransform: 'uppercase', verticalAlign: 'middle' }}>{labelHeader}</th>
+                  <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#374151', textTransform: 'uppercase', verticalAlign: 'middle' }}>{valueHeader}</th>
               </tr>
           </thead>
           <tbody>
-              {Array.from(data.entries()).map(([key, val]) => (
-                  <tr key={key} className="even:bg-gray-50">
-                      <td className="border border-gray-300 px-3 py-1.5 text-gray-800 font-medium" style={{ verticalAlign: 'middle' }}>{key}</td>
-                      <td className="border border-gray-300 px-3 py-1.5 text-right text-gray-800 font-bold" style={{ verticalAlign: 'middle' }}>{val}</td>
+              {Array.from(data.entries()).map(([key, val], index) => (
+                  <tr key={key} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                      <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#1f2937', fontWeight: 500, verticalAlign: 'middle' }}>{key}</td>
+                      <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', color: '#1f2937', fontWeight: 'bold', verticalAlign: 'middle' }}>{val}</td>
                   </tr>
               ))}
-               {data.size === 0 && <tr><td colSpan={2} className="border border-gray-300 px-3 py-1.5 text-center text-gray-500 italic" style={{ verticalAlign: 'middle' }}>No data</td></tr>}
+               {data.size === 0 && <tr><td colSpan={2} style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'center', color: '#6b7280', fontStyle: 'italic', verticalAlign: 'middle' }}>No data</td></tr>}
           </tbody>
       </table>
   );
@@ -356,164 +355,170 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
       <div
         id="report-container"
         ref={reportRef}
-        className="bg-white p-8 text-gray-900 antialiased"
         style={{ 
             width: '210mm', 
             minHeight: '297mm', 
+            backgroundColor: 'white',
+            padding: '20mm',
+            color: '#111827',
             visibility: 'hidden', 
             position: 'fixed', 
             top: 0, 
             left: '-9999px',
             zIndex: -10000,
-            lineHeight: '1.2', 
             fontFamily: 'Arial, sans-serif',
-            fontVariant: 'normal',
-            letterSpacing: 'normal',
             boxSizing: 'border-box',
-            textRendering: 'geometricPrecision', // Helps with text positioning in html2canvas
+            textRendering: 'geometricPrecision',
         }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b-2 border-gray-800 pb-2 mb-4">
-             <img src="https://mscnitanp.pages.dev/nitanp_logo.png" alt="Logo" className="h-16 object-contain" />
-             <div className="text-right">
-                 <h1 className="text-xl font-bold uppercase tracking-wider leading-none">Student Outing Report</h1>
-                 <p className="text-sm text-gray-600 mt-1">NIT Andhra Pradesh</p>
-                 <p className="text-sm font-semibold mt-1">Date: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #1f2937', paddingBottom: '16px', marginBottom: '24px' }}>
+             <div style={{ display: 'flex', alignItems: 'center' }}>
+                <img src="https://mscnitanp.pages.dev/nitanp_logo.png" alt="Logo" style={{ height: '64px', width: '64px', objectFit: 'contain', marginRight: '16px' }} />
+                <div>
+                    <h1 style={{ fontSize: '18px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: '1.2', margin: 0 }}>National Institute of Technology</h1>
+                    <p style={{ fontSize: '14px', color: '#4b5563', fontWeight: 'bold', textTransform: 'uppercase', margin: 0 }}>Andhra Pradesh</p>
+                </div>
+             </div>
+             <div style={{ textAlign: 'right' }}>
+                 <h2 style={{ fontSize: '18px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#1f2937', margin: 0 }}>Outing Report</h2>
+                 <p style={{ fontSize: '14px', fontWeight: 500, marginTop: '4px', color: '#374151', margin: 0 }}>{new Date().toLocaleDateString()}</p>
+                 <p style={{ fontSize: '12px', color: '#4b5563', margin: 0 }}>{new Date().toLocaleTimeString()}</p>
              </div>
         </div>
 
         {/* 1. Executive Summary */}
-        <div className="mb-6">
-            <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-3 py-1 mb-2 uppercase block leading-none">1. Executive Summary</h3>
-            <div className="grid grid-cols-4 gap-4">
-                <div className="border border-gray-200 p-3 rounded bg-gray-50 flex flex-col justify-center h-20">
-                    <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Total Students</div>
-                    <div className="text-3xl font-bold text-gray-800 leading-none" style={{ lineHeight: '1' }}>{totalStudents}</div>
+        <div style={{ marginBottom: '32px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e3a8a', borderBottom: '2px solid #1e40af', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>1. Executive Summary</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+                {/* STRICT LAYOUT: Explicit inline styles for reliable rendering */}
+                <div style={{ border: '1px solid #d1d5db', backgroundColor: '#f9fafb', borderRadius: '4px', padding: '12px' }}>
+                    <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>Total Students</p>
+                    <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#111827', lineHeight: 1, margin: 0, marginTop: '4px' }}>{totalStudents}</p>
                 </div>
-                <div className="border border-yellow-200 p-3 rounded bg-yellow-50 flex flex-col justify-center h-20">
-                    <div className="text-xs text-yellow-700 uppercase font-semibold mb-1">Currently Out</div>
-                    <div className="text-3xl font-bold text-yellow-700 leading-none" style={{ lineHeight: '1' }}>{onOutingCount}</div>
+                <div style={{ border: '1px solid #fcd34d', backgroundColor: '#fffbeb', borderRadius: '4px', padding: '12px' }}>
+                    <p style={{ fontSize: '10px', color: '#b45309', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>Currently Out</p>
+                    <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#b45309', lineHeight: 1, margin: 0, marginTop: '4px' }}>{onOutingCount}</p>
                 </div>
-                <div className="border border-red-200 p-3 rounded bg-red-50 flex flex-col justify-center h-20">
-                    <div className="text-xs text-red-700 uppercase font-semibold mb-1">Total Overdue</div>
-                    <div className="text-3xl font-bold text-red-700 leading-none" style={{ lineHeight: '1' }}>{overdueLogs.length}</div>
+                <div style={{ border: '1px solid #fca5a5', backgroundColor: '#fef2f2', borderRadius: '4px', padding: '12px' }}>
+                    <p style={{ fontSize: '10px', color: '#b91c1c', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>Total Overdue</p>
+                    <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#b91c1c', lineHeight: 1, margin: 0, marginTop: '4px' }}>{overdueLogs.length}</p>
                 </div>
-                <div className="border border-green-200 p-3 rounded bg-green-50 flex flex-col justify-center h-20">
-                    <div className="text-xs text-green-700 uppercase font-semibold mb-1">On Campus</div>
-                    <div className="text-3xl font-bold text-green-700 leading-none" style={{ lineHeight: '1' }}>{totalStudents - onOutingCount}</div>
+                <div style={{ border: '1px solid #86efac', backgroundColor: '#f0fdf4', borderRadius: '4px', padding: '12px' }}>
+                    <p style={{ fontSize: '10px', color: '#15803d', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>On Campus</p>
+                    <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#15803d', lineHeight: 1, margin: 0, marginTop: '4px' }}>{totalStudents - onOutingCount}</p>
                 </div>
             </div>
         </div>
 
         {/* 2. Current Demographics */}
-        <div className="mb-6">
-             <h3 className="text-lg font-bold text-blue-800 border-l-4 border-blue-600 pl-3 py-1 mb-3 uppercase block leading-none">2. Demographics (Currently Out)</h3>
-             <div className="grid grid-cols-2 gap-8">
+        <div style={{ marginBottom: '32px' }}>
+             <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e3a8a', borderBottom: '2px solid #1e40af', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>2. Demographics (Currently Out)</h3>
+             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '32px' }}>
                  <div>
-                     <h4 className="font-bold text-gray-700 mb-2 text-sm text-center uppercase">By Year</h4>
+                     <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>By Year</h4>
                      <SimpleTable data={demographicsOut.byYear} labelHeader="Year" valueHeader="Students Out" />
                  </div>
                  <div>
-                     <h4 className="font-bold text-gray-700 mb-2 text-sm text-center uppercase">By Hostel</h4>
+                     <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>By Hostel</h4>
                      <SimpleTable data={demographicsOut.byHostel} labelHeader="Hostel" valueHeader="Students Out" />
                  </div>
              </div>
         </div>
 
         {/* 3. Overdue Analysis */}
-        <div className="mb-6">
-             <h3 className="text-lg font-bold text-red-800 border-l-4 border-red-600 pl-3 py-1 mb-3 uppercase block leading-none">3. Overdue Analysis</h3>
-             <div className="grid grid-cols-2 gap-8 mb-4">
+        <div style={{ marginBottom: '32px' }}>
+             <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#991b1b', borderBottom: '2px solid #b91c1c', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>3. Overdue Analysis</h3>
+             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '32px', marginBottom: '16px' }}>
                  <div>
-                     <h4 className="font-bold text-gray-700 mb-2 text-sm text-center uppercase">Overdue by Year</h4>
+                     <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>Overdue by Year</h4>
                      <SimpleTable data={demographicsOverdue.byYear} labelHeader="Year" valueHeader="Overdue Count" />
                  </div>
                  <div>
-                     <h4 className="font-bold text-gray-700 mb-2 text-sm text-center uppercase">Overdue by Hostel</h4>
+                     <h4 style={{ fontWeight: 'bold', color: '#374151', marginBottom: '8px', fontSize: '12px', textAlign: 'center', textTransform: 'uppercase' }}>Overdue by Hostel</h4>
                      <SimpleTable data={demographicsOverdue.byHostel} labelHeader="Hostel" valueHeader="Overdue Count" />
                  </div>
              </div>
 
-             <h4 className="font-bold text-gray-800 mb-2 text-sm uppercase border-b border-gray-300 pb-1">Detailed Overdue List ({overdueLogs.length})</h4>
-             <table className="w-full border-collapse border border-gray-300 text-xs" style={{ tableLayout: 'auto' }}>
-                 <thead className="bg-red-50">
+             <h4 style={{ fontWeight: 'bold', color: '#1f2937', marginBottom: '8px', fontSize: '12px', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db', paddingBottom: '4px' }}>Detailed Overdue List ({overdueLogs.length})</h4>
+             <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d1d5db', fontSize: '12px' }}>
+                 <thead style={{ backgroundColor: '#fef2f2' }}>
                      <tr>
-                         <th className="border border-gray-300 px-2 py-1.5 text-left font-bold text-red-900 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Name</th>
-                         <th className="border border-gray-300 px-2 py-1.5 text-left font-bold text-red-900 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Roll No</th>
-                         <th className="border border-gray-300 px-2 py-1.5 text-left font-bold text-red-900 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Year</th>
-                         <th className="border border-gray-300 px-2 py-1.5 text-left font-bold text-red-900 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Hostel</th>
-                         <th className="border border-gray-300 px-2 py-1.5 text-left font-bold text-red-900 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Out Time</th>
-                         <th className="border border-gray-300 px-2 py-1.5 text-left font-bold text-red-900 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Type</th>
+                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Name</th>
+                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Roll No</th>
+                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Year</th>
+                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Hostel</th>
+                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Out Time</th>
+                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#7f1d1d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Type</th>
                      </tr>
                  </thead>
                  <tbody>
-                     {overdueLogs.slice(0, 10).map(log => {
+                     {overdueLogs.slice(0, 10).map((log, index) => {
                           const s = studentMap.get(log.studentId);
                           return (
-                            <tr key={log.id} className="even:bg-gray-50">
-                                <td className="border border-gray-300 px-2 py-1.5 font-bold text-gray-800" style={{ verticalAlign: 'middle' }}>{log.studentName}</td>
-                                <td className="border border-gray-300 px-2 py-1.5 text-gray-700" style={{ verticalAlign: 'middle' }}>{log.rollNumber}</td>
-                                <td className="border border-gray-300 px-2 py-1.5 text-gray-700" style={{ verticalAlign: 'middle' }}>{log.year}</td>
-                                <td className="border border-gray-300 px-2 py-1.5 text-gray-700" style={{ verticalAlign: 'middle' }}>{s?.hostel || '-'}</td>
-                                <td className="border border-gray-300 px-2 py-1.5 text-gray-700" style={{ verticalAlign: 'middle' }}>{new Date(log.checkOutTime).toLocaleString()}</td>
-                                <td className="border border-gray-300 px-2 py-1.5 text-gray-700" style={{ verticalAlign: 'middle' }}>{log.outingType}</td>
+                            <tr key={log.id} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                                <td style={{ border: '1px solid #d1d5db', padding: '6px', fontWeight: 'bold', color: '#1f2937', verticalAlign: 'middle' }}>{log.studentName}</td>
+                                <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.rollNumber}</td>
+                                <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.year}</td>
+                                <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{s?.hostel || '-'}</td>
+                                <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{new Date(log.checkOutTime).toLocaleString()}</td>
+                                <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.outingType}</td>
                             </tr>
                           );
                      })}
                      {overdueLogs.length > 10 && (
                          <tr>
-                             <td colSpan={6} className="border border-gray-300 px-2 py-1.5 text-center text-gray-500 italic" style={{ verticalAlign: 'middle' }}>
+                             <td colSpan={6} style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'center', color: '#6b7280', fontStyle: 'italic', verticalAlign: 'middle' }}>
                                  ...and {overdueLogs.length - 10} more students.
                              </td>
                          </tr>
                      )}
                      {overdueLogs.length === 0 && (
-                         <tr><td colSpan={6} className="border border-gray-300 px-2 py-3 text-center text-green-600 font-medium" style={{ verticalAlign: 'middle' }}>No overdue students.</td></tr>
+                         <tr><td colSpan={6} style={{ border: '1px solid #d1d5db', padding: '12px', textAlign: 'center', color: '#16a34a', fontWeight: 500, verticalAlign: 'middle' }}>No overdue students.</td></tr>
                      )}
                  </tbody>
              </table>
         </div>
         
         {/* 4. Hostel Occupancy Status */}
-        <div className="mb-4">
-             <h3 className="text-lg font-bold text-slate-800 border-l-4 border-slate-600 pl-3 py-1 mb-3 uppercase block leading-none">4. Hostel Occupancy Status</h3>
-             <table className="w-full border-collapse border border-gray-300 text-xs">
-                 <thead className="bg-slate-100">
+        <div style={{ marginBottom: '16px' }}>
+             <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1f2937', borderBottom: '2px solid #4b5563', paddingBottom: '4px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.025em' }}>4. Hostel Occupancy Status</h3>
+             <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d1d5db', fontSize: '12px' }}>
+                 <thead style={{ backgroundColor: '#f3f4f6' }}>
                      <tr>
-                         <th className="border border-gray-300 px-3 py-2 text-left font-bold text-gray-700 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Hostel Name</th>
-                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-gray-700 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Total Registered</th>
-                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-yellow-700 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Currently Out</th>
-                         <th className="border border-gray-300 px-3 py-2 text-right font-bold text-green-700 uppercase tracking-wider" style={{ verticalAlign: 'middle' }}>Currently Present</th>
+                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'left', fontWeight: 'bold', color: '#374151', textTransform: 'uppercase', verticalAlign: 'middle' }}>Hostel Name</th>
+                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#374151', textTransform: 'uppercase', verticalAlign: 'middle' }}>Total Registered</th>
+                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#b45309', textTransform: 'uppercase', verticalAlign: 'middle' }}>Currently Out</th>
+                         <th style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#15803d', textTransform: 'uppercase', verticalAlign: 'middle' }}>Currently Present</th>
                      </tr>
                  </thead>
                  <tbody>
-                    {hostelOccupancy.map(row => (
-                        <tr key={row.hostel} className="even:bg-gray-50">
-                            <td className="border border-gray-300 px-3 py-2 font-bold text-gray-800" style={{ verticalAlign: 'middle' }}>{row.hostel}</td>
-                            <td className="border border-gray-300 px-3 py-2 text-right text-gray-800" style={{ verticalAlign: 'middle' }}>{row.total}</td>
-                            <td className="border border-gray-300 px-3 py-2 text-right text-yellow-600 font-semibold" style={{ verticalAlign: 'middle' }}>{row.out}</td>
-                            <td className="border border-gray-300 px-3 py-2 text-right text-green-600 font-bold" style={{ verticalAlign: 'middle' }}>{row.present}</td>
+                    {hostelOccupancy.map((row, index) => (
+                        <tr key={row.hostel} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                            <td style={{ border: '1px solid #d1d5db', padding: '6px', fontWeight: 'bold', color: '#1f2937', verticalAlign: 'middle' }}>{row.hostel}</td>
+                            <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', color: '#1f2937', verticalAlign: 'middle' }}>{row.total}</td>
+                            <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', color: '#d97706', fontWeight: 600, verticalAlign: 'middle' }}>{row.out}</td>
+                            <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', color: '#16a34a', fontWeight: 'bold', verticalAlign: 'middle' }}>{row.present}</td>
                         </tr>
                     ))}
                     {/* Total Row */}
-                    <tr className="bg-gray-200 border-t-2 border-gray-400">
-                         <td className="border border-gray-300 px-3 py-2 font-bold text-gray-900 uppercase" style={{ verticalAlign: 'middle' }}>Total</td>
-                         <td className="border border-gray-300 px-3 py-2 text-right font-bold text-gray-900" style={{ verticalAlign: 'middle' }}>{hostelOccupancyTotals.total}</td>
-                         <td className="border border-gray-300 px-3 py-2 text-right font-bold text-yellow-800" style={{ verticalAlign: 'middle' }}>{hostelOccupancyTotals.out}</td>
-                         <td className="border border-gray-300 px-3 py-2 text-right font-bold text-green-800" style={{ verticalAlign: 'middle' }}>{hostelOccupancyTotals.present}</td>
+                    <tr style={{ backgroundColor: '#e5e7eb', borderTop: '2px solid #9ca3af' }}>
+                         <td style={{ border: '1px solid #d1d5db', padding: '6px', fontWeight: 'bold', color: '#111827', textTransform: 'uppercase', verticalAlign: 'middle' }}>Total</td>
+                         <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#111827', verticalAlign: 'middle' }}>{hostelOccupancyTotals.total}</td>
+                         <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#92400e', verticalAlign: 'middle' }}>{hostelOccupancyTotals.out}</td>
+                         <td style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'right', fontWeight: 'bold', color: '#166534', verticalAlign: 'middle' }}>{hostelOccupancyTotals.present}</td>
                     </tr>
                     {hostelOccupancy.length === 0 && (
-                        <tr><td colSpan={4} className="border border-gray-300 px-3 py-4 text-center text-gray-500 italic" style={{ verticalAlign: 'middle' }}>No hostel data available.</td></tr>
+                        <tr><td colSpan={4} style={{ border: '1px solid #d1d5db', padding: '16px', textAlign: 'center', color: '#6b7280', fontStyle: 'italic', verticalAlign: 'middle' }}>No hostel data available.</td></tr>
                     )}
                  </tbody>
              </table>
         </div>
         
         {/* Footer */}
-        <div className="mt-auto pt-2 border-t border-gray-400 flex justify-between text-xs text-gray-500">
-             <p>Generated automatically by Outing Management System</p>
-             <p>Page 1 of 1</p>
+        <div style={{ marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #9ca3af', display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280' }}>
+             <p style={{ margin: 0 }}>Generated automatically by Outing Management System</p>
+             <p style={{ margin: 0 }}>Page 1 of 1</p>
         </div>
       </div>
       {/* --- END REPORT TEMPLATE --- */}
