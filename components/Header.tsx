@@ -63,7 +63,7 @@ const Header: React.FC<HeaderProps> = ({ currentView, onViewChange, gate, lastLo
                 </span>
                 {lastLogin && (
                     <span className="text-[10px] text-gray-400 hidden sm:block">
-                        Last Login: {new Date(lastLogin).toLocaleString()}
+                        Last Login: {new Date(lastLogin).toLocaleString('en-IN')}
                     </span>
                 )}
             </div>

@@ -137,14 +137,14 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                 outGateName: null,
                 ...formData,
             };
+            
+            // Show preview immediately using the entered data. 
+            // This prevents issues where the app might fetch an older/incorrect log 
+            // if the database update is slow or if there's an ID collision.
+            setPassToPreview({ id: 'new-temp-id', ...newPassData });
+
             await firebaseService.addVisitorLog(newPassData);
             
-            // The listener will add it to the state, but we need the pass to preview it.
-            setTimeout(() => {
-                const createdPass = visitorLogs.find(log => log.passNumber === newPassData.passNumber);
-                setPassToPreview(createdPass || {id: 'preview', ...newPassData});
-            }, 500);
-
             setNotification({ message: 'Visitor pass generated successfully!', type: 'success' });
             setFormData(INITIAL_FORM_DATA);
         } catch (error) {
@@ -157,7 +157,7 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
     
     const formatDateTime = (isoString: string | null) => {
         if (!isoString) return 'N/A';
-        return new Date(isoString).toLocaleString();
+        return new Date(isoString).toLocaleString('en-IN');
     };
     
     const handleSort = (key: SortKey) => {
@@ -275,7 +275,7 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
         const dataToExport = logsToExport.map(log => {
             return {
                 "Pass Number": log.passNumber,
-                "Date": new Date(log.date).toLocaleDateString(),
+                "Date": new Date(log.date).toLocaleDateString('en-IN'),
                 "Visitor Name": log.name,
                 "Relation": log.relation,
                 "Mobile Number": log.mobileNumber,

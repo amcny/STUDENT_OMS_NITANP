@@ -1,3 +1,4 @@
+
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { OutingRecord, Student, OutingType } from '../types';
@@ -166,7 +167,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
 
   const formatDateTime = (isoString: string | null) => {
     if (!isoString) return 'N/A';
-    return new Date(isoString).toLocaleString();
+    return new Date(isoString).toLocaleString('en-IN');
   };
   
   const handleSort = (key: SortKey) => {
@@ -195,14 +196,14 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     let updateData: Partial<OutingRecord>;
     
     if (isReverting) {
-        const newRemark = `Check-in reverted by ${gate} on ${new Date().toLocaleString()}`;
+        const newRemark = `Check-in reverted by ${gate} on ${new Date().toLocaleString('en-IN')}`;
         updateData = {
             checkInTime: null,
             checkInGate: null,
             remarks: logToToggleStatus.remarks ? `${logToToggleStatus.remarks}; ${newRemark}` : newRemark,
         };
     } else {
-        const newRemark = `Manual Check-In by ${gate} on ${new Date().toLocaleString()}`;
+        const newRemark = `Manual Check-In by ${gate} on ${new Date().toLocaleString('en-IN')}`;
         updateData = {
             checkInTime: new Date().toISOString(),
             checkInGate: gate, 
@@ -216,7 +217,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
 
   const handleConfirmResolveOverdue = async () => {
     if (!logToResolve) return;
-    const newRemark = `Overdue status resolved by ${gate} on ${new Date().toLocaleString()}.`;
+    const newRemark = `Overdue status resolved by ${gate} on ${new Date().toLocaleString('en-IN')}.`;
     const updatedData = {
       overdueResolved: true,
       remarks: logToResolve.remarks ? `${logToResolve.remarks}; ${newRemark}` : newRemark,
@@ -253,7 +254,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             checkInTime: null,
             checkOutGate: gate,
             checkInGate: null,
-            remarks: `Manual Check-Out by ${gate} on ${new Date().toLocaleString()}`
+            remarks: `Manual Check-Out by ${gate} on ${new Date().toLocaleString('en-IN')}`
         };
         await firebaseService.addOutingLog(newLog);
         setManualEntryAlert({ message: `${student.name} checked out successfully.`, type: 'success'});
@@ -275,7 +276,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             return;
         }
 
-        const newRemark = `Manual Check-In by ${gate} on ${new Date().toLocaleString()}`;
+        const newRemark = `Manual Check-In by ${gate} on ${new Date().toLocaleString('en-IN')}`;
         const updateData = {
             checkInTime: new Date().toISOString(),
             checkInGate: gate,

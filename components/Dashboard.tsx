@@ -382,8 +382,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
              </div>
              <div style={{ textAlign: 'right' }}>
                  <h2 style={{ fontSize: '18px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#1f2937', margin: 0 }}>Outing Report</h2>
-                 <p style={{ fontSize: '14px', fontWeight: 500, marginTop: '4px', color: '#374151', margin: 0 }}>{new Date().toLocaleDateString()}</p>
-                 <p style={{ fontSize: '12px', color: '#4b5563', margin: 0 }}>{new Date().toLocaleTimeString()}</p>
+                 <p style={{ fontSize: '14px', fontWeight: 500, marginTop: '4px', color: '#374151', margin: 0 }}>{new Date().toLocaleDateString('en-IN')}</p>
+                 <p style={{ fontSize: '12px', color: '#4b5563', margin: 0 }}>{new Date().toLocaleTimeString('en-IN')}</p>
              </div>
         </div>
 
@@ -461,7 +461,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                                 <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.rollNumber}</td>
                                 <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.year}</td>
                                 <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{s?.hostel || '-'}</td>
-                                <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{new Date(log.checkOutTime).toLocaleString()}</td>
+                                <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{new Date(log.checkOutTime).toLocaleString('en-IN')}</td>
                                 <td style={{ border: '1px solid #d1d5db', padding: '6px', color: '#374151', verticalAlign: 'middle' }}>{log.outingType}</td>
                             </tr>
                           );

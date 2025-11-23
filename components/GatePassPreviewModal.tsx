@@ -46,7 +46,7 @@ const PassLayout: React.FC<{ passData: VisitorPassRecord }> = ({ passData }) => 
                 </div>
                 <div className="col-span-4 flex flex-col items-start justify-start border-l-2 pl-4 space-y-3">
                    <DetailItem label="Pass Number" value={passData.passNumber} />
-                   <DetailItem label="Date" value={new Date(passData.date).toLocaleDateString()} />
+                   <DetailItem label="Date" value={new Date(passData.date).toLocaleDateString('en-IN')} />
                 </div>
             </div>
         </div>
@@ -54,11 +54,11 @@ const PassLayout: React.FC<{ passData: VisitorPassRecord }> = ({ passData }) => 
         <footer className="border-t-2 border-black pt-2 flex-shrink-0">
             <div className="grid grid-cols-2 gap-x-4">
                  <div>
-                    <DetailItem label="In-Time" value={new Date(passData.inTime).toLocaleString()} />
+                    <DetailItem label="In-Time" value={new Date(passData.inTime).toLocaleString('en-IN')} />
                     <DetailItem label="In-Gate" value={passData.gateName} />
                 </div>
                 <div>
-                    <DetailItem label="Out-Time" value={passData.outTime ? new Date(passData.outTime).toLocaleString() : ''} />
+                    <DetailItem label="Out-Time" value={passData.outTime ? new Date(passData.outTime).toLocaleString('en-IN') : ''} />
                     <DetailItem label="Out-Gate" value={passData.outGateName} />
                 </div>
             </div>
@@ -175,7 +175,7 @@ const GatePassPreviewModal: React.FC<GatePassPreviewModalProps> = ({ isOpen, onC
           <div class="header">
             <span class="logo">NIT ANDHRA PRADESH</span>
             <span class="sub">Tadepalligudem - 534101</span>
-            <span class="sub" style="margin-top:4px;">${new Date().toLocaleString()}</span>
+            <span class="sub" style="margin-top:4px;">${new Date().toLocaleString('en-IN')}</span>
           </div>
 
           <div class="pass-title">VISITOR PASS</div>
