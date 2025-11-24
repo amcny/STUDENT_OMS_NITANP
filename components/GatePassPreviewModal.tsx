@@ -135,42 +135,97 @@ const GatePassPreviewModal: React.FC<GatePassPreviewModalProps> = ({ isOpen, onC
     }
 
     // Thermal Receipt Layout (80mm width)
+    // Optimized for standard 80mm thermal printers with proper margins
     const htmlContent = `
       <!DOCTYPE html>
       <html>
         <head>
           <title>Visitor Pass - Thermal</title>
           <style>
+            @page {
+                margin: 0;
+                size: 80mm auto;
+            }
             body { 
-                font-family: 'Courier New', monospace; 
-                width: 72mm; /* ~80mm minus margins */
-                margin: 0 auto;
-                padding: 5px 0;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                margin: 0;
+                padding: 4mm 5mm; /* Top/Bottom: 4mm, Left/Right: 5mm for safe printing area */
+                width: 80mm;
+                box-sizing: border-box;
                 font-size: 12px;
                 color: black;
+                line-height: 1.3;
+                background: white;
             }
-            .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed black; padding-bottom: 5px; }
-            .logo { font-weight: bold; font-size: 14px; display: block; margin-bottom: 2px; }
-            .sub { font-size: 10px; display: block; }
+            .header { 
+                text-align: center; 
+                margin-bottom: 8px; 
+                border-bottom: 2px solid black; 
+                padding-bottom: 5px; 
+            }
+            .logo { 
+                font-weight: 800; 
+                font-size: 15px; 
+                display: block; 
+                margin-bottom: 2px;
+                line-height: 1.2;
+            }
+            .sub { 
+                font-size: 11px; 
+                display: block; 
+                color: #222;
+            }
             .pass-title { 
                 text-align: center; 
-                font-weight: bold; 
+                font-weight: 900; 
                 font-size: 16px; 
                 margin: 10px 0; 
                 border: 2px solid black; 
-                padding: 5px; 
+                padding: 6px; 
                 background: #eee;
                 -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                text-transform: uppercase;
             }
-            .section { margin-bottom: 8px; border-bottom: 1px dotted #999; padding-bottom: 2px; }
-            .row { display: flex; margin-bottom: 4px; }
-            .label { font-weight: bold; width: 35%; flex-shrink: 0; }
-            .value { width: 65%; word-wrap: break-word; }
-            .footer { text-align: center; margin-top: 15px; border-top: 1px dashed black; padding-top: 5px; font-size: 10px; }
+            .section { 
+                margin-bottom: 10px; 
+                border-bottom: 1px dashed #444; 
+                padding-bottom: 8px; 
+            }
+            .section:last-of-type {
+                border-bottom: none;
+            }
+            .row { 
+                display: flex; 
+                margin-bottom: 3px;
+                align-items: baseline;
+            }
+            .label { 
+                font-weight: bold; 
+                width: 35%; 
+                flex-shrink: 0; 
+                font-size: 11px; 
+                text-transform: uppercase; 
+                color: #333;
+            }
+            .value { 
+                width: 65%; 
+                word-wrap: break-word; 
+                font-weight: 700; 
+                font-size: 13px;
+                color: black;
+            }
+            .footer { 
+                text-align: center; 
+                margin-top: 15px; 
+                border-top: 2px solid black; 
+                padding-top: 8px; 
+                font-size: 11px; 
+                font-weight: bold; 
+            }
             
             @media print {
-                @page { margin: 0; size: 80mm auto; }
-                body { margin: 5px; }
+                body { margin: 0; }
             }
           </style>
         </head>
@@ -184,15 +239,15 @@ const GatePassPreviewModal: React.FC<GatePassPreviewModalProps> = ({ isOpen, onC
           <div class="pass-title">VISITOR PASS</div>
 
           <div class="section">
-            <div class="row"><span class="label">Pass No:</span><span class="value" style="font-weight:bold; font-size:14px;">${passData.passNumber}</span></div>
-            <div class="row"><span class="label">Name:</span><span class="value" style="font-weight:bold;">${passData.name}</span></div>
+            <div class="row"><span class="label">Pass No:</span><span class="value" style="font-size:15px; font-weight:900;">${passData.passNumber}</span></div>
+            <div class="row"><span class="label">Name:</span><span class="value" style="font-size:14px; font-weight:800; text-transform: uppercase;">${passData.name}</span></div>
             <div class="row"><span class="label">Phone:</span><span class="value">${passData.mobileNumber}</span></div>
             <div class="row"><span class="label">Relation:</span><span class="value">${passData.relation}</span></div>
             <div class="row"><span class="label">Vehicle:</span><span class="value">${passData.vehicleNumber || '-'}</span></div>
           </div>
 
           <div class="section">
-            <div class="row"><span class="label">To Meet:</span><span class="value" style="font-weight:bold;">${passData.whomToMeet}</span></div>
+            <div class="row"><span class="label">To Meet:</span><span class="value" style="font-size:13px; font-weight:700; text-transform: uppercase;">${passData.whomToMeet}</span></div>
             <div class="row"><span class="label">Type:</span><span class="value">${passData.personType}</span></div>
             <div class="row"><span class="label">Location:</span><span class="value">${passData.placeToVisit}</span></div>
             <div class="row"><span class="label">Purpose:</span><span class="value">${passData.purpose}</span></div>
@@ -200,12 +255,13 @@ const GatePassPreviewModal: React.FC<GatePassPreviewModalProps> = ({ isOpen, onC
           
           <div class="section">
              <div class="row"><span class="label">In Gate:</span><span class="value">${passData.gateName}</span></div>
+             <div class="row"><span class="label">In Time:</span><span class="value">${new Date(passData.inTime).toLocaleTimeString('en-IN', {hour: '2-digit', minute:'2-digit'})}</span></div>
           </div>
 
           <div class="footer">
-            <p style="margin-bottom: 20px;">Signature of Security</p>
-            <p>Valid for Single Entry Only</p>
-            <p>Please return at gate while exiting.</p>
+            <p style="margin-bottom: 25px;">Signature of Security</p>
+            <p style="font-size: 10px; margin-bottom: 5px;">Valid for Single Entry Only</p>
+            <p style="font-size: 10px; font-weight: normal;">Please return at gate while exiting</p>
           </div>
         </body>
       </html>
