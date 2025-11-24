@@ -377,7 +377,7 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                 <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Create Visitor Gate Pass</h2>
                 {notification && <div className="mb-6"><Alert message={notification.message} type={notification.type} onClose={() => setNotification(null)} /></div>}
                 
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={handleSubmit} autoComplete="off">
                     <div className="flex flex-col lg:flex-row gap-12">
                         {/* Left Side: Visitor's Details */}
                         <div className="lg:w-1/2">
