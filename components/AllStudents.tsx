@@ -10,6 +10,9 @@ import * as firebaseService from '../services/firebaseService';
 import { BRANCH_OPTIONS, YEAR_OPTIONS, GENDER_OPTIONS, STUDENT_TYPE_OPTIONS } from '../constants';
 import Modal from './Modal';
 
+// Allow global XLSX var from CDN
+declare var XLSX: any;
+
 const SECURITY_PIN = '200405';
 
 interface AllStudentsProps {
@@ -32,6 +35,10 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [bulkDeleteConfig, setBulkDeleteConfig] = useState<{
+      students: Student[];
+      hasExported: boolean;
+  }>({ students: [], hasExported: false });
   const [isBulkSelectMode, setIsBulkSelectMode] = useState(false);
 
   const [pinAction, setPinAction] = useState<{ action: 'singleDelete'; student: Student } | { action: 'bulkDelete' } | null>(null);
@@ -183,6 +190,70 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
     });
   };
 
+    const handleInitiateBulkDelete = () => {
+        const studentsToDelete = sortedAndFilteredStudents.filter(s => selectedStudentIds.has(s.id));
+        setBulkDeleteConfig({ students: studentsToDelete, hasExported: false });
+        setIsBulkDeleteModalOpen(true);
+    };
+
+    const exportStudents = (studentsToExport: Student[], fileName: string): boolean => {
+        if (typeof XLSX === 'undefined') {
+            console.error("XLSX library is not loaded.");
+            alert("Could not export to Excel. The required library is missing.");
+            return false;
+        }
+        if (studentsToExport.length === 0) {
+            alert("No students selected to export.");
+            return false;
+        }
+        const dataToExport = studentsToExport.map(student => ({
+            "Name": student.name,
+            "Roll Number": student.rollNumber,
+            "Registration Number": student.registrationNumber,
+            "Branch": student.branch,
+            "Year": student.year,
+            "Gender": student.gender,
+            "Student Type": student.studentType,
+            "Hostel": student.hostel || 'N/A',
+            "Room Number": student.roomNumber || 'N/A',
+            "Contact Number": student.contactNumber,
+            "Photo URL": student.faceImage || 'N/A',
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Student Records");
+
+        const colWidths = Object.keys(dataToExport[0]).map(key => ({
+            wch: Math.max(
+                key.length,
+                ...dataToExport.map(row => (row[key as keyof typeof row] || '').toString().length)
+            ) + 2
+        }));
+        worksheet["!cols"] = colWidths;
+
+        XLSX.writeFile(workbook, fileName);
+        return true;
+    };
+
+    const handleExportForDeletion = () => {
+        const success = exportStudents(
+            bulkDeleteConfig.students,
+            `DELETION_EXPORT_Students_${new Date().toISOString().slice(0, 10)}.xlsx`
+        );
+        if (success) {
+            setBulkDeleteConfig(prev => ({ ...prev, hasExported: true }));
+        }
+    };
+    
+    const handleProceedToPin = () => {
+        setIsBulkDeleteModalOpen(false);
+        setPinAction({ action: 'bulkDelete' });
+        setPinError('');
+        setPinInput('');
+    };
+
+
   return (
     <>
       <div className="bg-white p-8 rounded-lg shadow-xl max-w-screen-2xl mx-auto">
@@ -243,7 +314,7 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
                 {isBulkSelectMode ? (
                     <>
                         <button
-                            onClick={() => setIsBulkDeleteModalOpen(true)}
+                            onClick={handleInitiateBulkDelete}
                             disabled={selectedStudentIds.size === 0}
                             className="flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 disabled:bg-gray-400"
                             title="Delete selected students"
@@ -396,15 +467,71 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
         onSave={handleUpdateStudent}
         allStudents={students}
       />
-      <ConfirmationModal
-        isOpen={isBulkDeleteModalOpen}
-        onClose={() => setIsBulkDeleteModalOpen(false)}
-        onConfirm={() => setPinAction({ action: 'bulkDelete' })}
-        title={`Delete ${selectedStudentIds.size} Students`}
-        message={`This will permanently delete the ${selectedStudentIds.size} selected students. This action cannot be undone.`}
-        confirmButtonText="Proceed"
-        confirmButtonClassName="bg-red-600 hover:bg-red-700"
-      />
+      
+    <Modal isOpen={isBulkDeleteModalOpen} onClose={() => setIsBulkDeleteModalOpen(false)} title="Bulk Student Deletion">
+        <div className="space-y-6">
+            <div>
+                <div className="flex items-center space-x-3 mb-3">
+                    <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white font-bold rounded-full text-lg">1</span>
+                    <h4 className="font-semibold text-xl text-gray-800">Confirm Selection</h4>
+                </div>
+                <div className="mt-4 p-4 bg-red-50 border-l-4 border-red-400 rounded-r-lg">
+                    <div className="flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-3 flex-shrink-0 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.03-1.742 3.03H4.42c-1.532 0-2.492-1.696-1.742-3.03l5.58-9.92zM10 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        <p className="text-lg font-semibold text-red-800">
+                            This will permanently delete <strong className="font-bold text-red-900">{bulkDeleteConfig.students.length}</strong> selected student record(s).
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <div className="flex items-center space-x-3 mb-3">
+                    <span className={`flex items-center justify-center w-8 h-8 font-bold rounded-full text-lg ${bulkDeleteConfig.students.length > 0 ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>2</span>
+                    <h4 className="font-semibold text-xl text-gray-800">Export for Archiving (Required)</h4>
+                </div>
+                <div className="p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 rounded-r-lg">
+                    <div className="flex items-start">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-3 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.03-1.742 3.03H4.42c-1.532 0-2.492-1.696-1.742-3.03l5.58-9.92zM10 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        <div>
+                            <h4 className="font-bold">Important!</h4>
+                            <p className="text-sm">Once records are deleted, they cannot be recovered. You must export the data for your records before proceeding.</p>
+                        </div>
+                    </div>
+                </div>
+                <button 
+                    onClick={handleExportForDeletion} 
+                    disabled={bulkDeleteConfig.students.length === 0}
+                    className="mt-3 w-full bg-green-600 text-white font-semibold py-3 px-4 rounded-md hover:bg-green-700 transition disabled:bg-gray-400 flex items-center justify-center space-x-2"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2V7a5 5 0 00-5-5zm0 2a3 3 0 013 3v2H7V7a3 3 0 013-3z" />
+                    </svg>
+                    <span>Export {bulkDeleteConfig.students.length} Records</span>
+                </button>
+            </div>
+            <div>
+                <div className="flex items-center space-x-3 mb-3">
+                    <span className={`flex items-center justify-center w-8 h-8 font-bold rounded-full text-lg ${bulkDeleteConfig.hasExported ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>3</span>
+                    <h4 className="font-semibold text-xl text-gray-800">Confirm Deletion</h4>
+                </div>
+                <button 
+                    onClick={handleProceedToPin} 
+                    disabled={!bulkDeleteConfig.hasExported || bulkDeleteConfig.students.length === 0}
+                    className="w-full bg-red-600 text-white font-semibold py-3 px-4 rounded-md hover:bg-red-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                    title={!bulkDeleteConfig.hasExported ? "Please export the records first" : ""}
+                >
+                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                         <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
+                     </svg>
+                     <span>Proceed to Delete...</span>
+                </button>
+            </div>
+        </div>
+    </Modal>
 
     <Modal isOpen={!!pinAction} onClose={handlePinModalClose} title="Security Verification" size="sm">
         <div className="space-y-4">

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import Modal from './Modal';
 import { VisitorPassRecord } from '../types';
@@ -163,6 +162,12 @@ const GatePassPreviewModal: React.FC<GatePassPreviewModalProps> = ({ isOpen, onC
                 border-bottom: 2px solid black; 
                 padding-bottom: 5px; 
             }
+            .logo-img {
+                display: block;
+                margin: 0 auto 5px auto;
+                width: 40px;
+                height: 40px;
+            }
             .logo { 
                 font-weight: 800; 
                 font-size: 15px; 
@@ -231,6 +236,7 @@ const GatePassPreviewModal: React.FC<GatePassPreviewModalProps> = ({ isOpen, onC
         </head>
         <body>
           <div class="header">
+            <img src="https://mscnitanp.pages.dev/nitanp_logo.png" alt="Logo" class="logo-img" />
             <span class="logo">NIT ANDHRA PRADESH</span>
             <span class="sub">Tadepalligudem - 534101</span>
             <span class="sub" style="margin-top:4px;">${new Date().toLocaleString('en-IN')}</span>

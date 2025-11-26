@@ -80,13 +80,24 @@ const OutingKiosk: React.FC<OutingKioskProps> = ({ gate }) => {
   };
 
   const handleCheckOut = async (student: Student) => {
-    const hasActiveOuting = outingLogs.some(log => log.studentId === student.id && log.checkInTime === null);
-    if (hasActiveOuting) {
-        setAlert({ message: `${student.name} already has an active outing. Cannot check out again.`, type: 'error' });
+    // First, check the local state for any active outing.
+    const activeLogInState = outingLogs.find(log => log.studentId === student.id && log.checkInTime === null);
+    if (activeLogInState) {
+        setAlert({ message: `${student.name} already has an active '${activeLogInState.outingType}' outing. Cannot check out again.`, type: 'error' });
+        setIsLoading(false);
+        return;
+    }
+    
+    // If not found locally, perform a deep check in the database for older active logs.
+    setAlert({ message: 'Checking for any existing active outings...', type: 'info' });
+    const anyOlderActiveLog = await firebaseService.findAnyActiveOutingForStudent(student.id);
+    if (anyOlderActiveLog) {
+        setAlert({ message: `${student.name} has an older active '${anyOlderActiveLog.outingType}' outing. Please check that in first.`, type: 'error' });
         setIsLoading(false);
         return;
     }
 
+    // If both checks pass, proceed with creating a new log.
     const newLog: Omit<OutingRecord, 'id'> = {
         studentId: student.id,
         studentName: student.name,
@@ -113,12 +124,19 @@ const OutingKiosk: React.FC<OutingKioskProps> = ({ gate }) => {
   }
 
   const handleCheckIn = async (student: Student) => {
-    const activeLog = outingLogs.find(
+    // First, try to find the log in the local (recent + active) state for speed.
+    let activeLog = outingLogs.find(
       log => log.studentId === student.id && log.outingType === outingType && log.checkInTime === null
     );
 
+    // If not found locally, it might be an older log. Perform a direct DB query as a fallback.
     if (!activeLog) {
-      setAlert({ message: `No active ${outingType} outing found for ${student.name}.`, type: 'error' });
+        setAlert({ message: 'No recent active outing found. Checking database for older records...', type: 'info' });
+        activeLog = await firebaseService.findActiveOutingForStudent(student.id, outingType);
+    }
+
+    if (!activeLog) {
+      setAlert({ message: `No active ${outingType} outing found for ${student.name}. Please check the outing type or contact an administrator.`, type: 'error' });
       setIsLoading(false);
       return;
     }

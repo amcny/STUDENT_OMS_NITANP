@@ -14,9 +14,11 @@ import {
   where,
   getDocs,
   serverTimestamp,
+  orderBy,
+  limit
 } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
-import { Student, OutingRecord, VisitorPassRecord, UserProfile } from '../types';
+import { Student, OutingRecord, VisitorPassRecord, UserProfile, OutingType } from '../types';
 
 // --- Helper Functions for Data Conversion ---
 
@@ -74,17 +76,76 @@ export const onStudentsUpdate = (callback: (students: Student[]) => void) => {
   });
 };
 
+/**
+ * OPTIMIZED LISTENER: Fetches two sets of data and merges them.
+ * 1. All outing logs from the last 7 days for historical context.
+ * 2. All currently active logs (checkInTime is null), regardless of age.
+ * This ensures the logbook is performant while always showing ongoing outings.
+ */
 export const onOutingLogsUpdate = (callback: (logs: OutingRecord[]) => void) => {
   const logsCollection = collection(db, 'outingLogs');
-  return onSnapshot(logsCollection, snapshot => {
-    const logsList = snapshot.docs.map(doc => fromFirestore<OutingRecord>(doc));
-    callback(logsList);
+  let activeLogs: OutingRecord[] = [];
+  let recentLogs: OutingRecord[] = [];
+
+  const mergeAndCallback = () => {
+      const combined = new Map<string, OutingRecord>();
+      // Add all logs from both lists to the map.
+      // The map automatically handles duplicates (e.g., a log that is both active and recent).
+      activeLogs.forEach(log => combined.set(log.id, log));
+      recentLogs.forEach(log => combined.set(log.id, log));
+      
+      // Sort the final list by checkOutTime descending before sending to UI
+      const sortedLogs = Array.from(combined.values()).sort((a, b) => 
+          new Date(b.checkOutTime).getTime() - new Date(a.checkOutTime).getTime()
+      );
+      
+      callback(sortedLogs);
+  };
+
+  // Query 1: All active logs (ongoing)
+  const activeQuery = query(logsCollection, where('checkInTime', '==', null));
+  const unsubscribeActive = onSnapshot(activeQuery, snapshot => {
+      activeLogs = snapshot.docs.map(doc => fromFirestore<OutingRecord>(doc));
+      mergeAndCallback();
   });
+
+  // Query 2: All recent logs (last 7 days)
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const recentQuery = query(
+      logsCollection, 
+      where('checkOutTime', '>=', Timestamp.fromDate(sevenDaysAgo))
+  );
+  const unsubscribeRecent = onSnapshot(recentQuery, snapshot => {
+      recentLogs = snapshot.docs.map(doc => fromFirestore<OutingRecord>(doc));
+      mergeAndCallback();
+  });
+
+  // Return a function that unsubscribes from both listeners
+  return () => {
+      unsubscribeActive();
+      unsubscribeRecent();
+  };
 };
 
+
+/**
+ * OPTIMIZED LISTENER: Only fetches visitor logs from the last 7 days.
+ */
 export const onVisitorLogsUpdate = (callback: (logs: VisitorPassRecord[]) => void) => {
   const logsCollection = collection(db, 'visitorLogs');
-  return onSnapshot(logsCollection, snapshot => {
+
+  // Calculate date 7 days ago
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const recentLogsQuery = query(
+    logsCollection,
+    where('inTime', '>=', Timestamp.fromDate(sevenDaysAgo)),
+    orderBy('inTime', 'desc')
+  );
+
+  return onSnapshot(recentLogsQuery, snapshot => {
     const logsList = snapshot.docs.map(doc => fromFirestore<VisitorPassRecord>(doc));
     callback(logsList);
   });
@@ -233,6 +294,47 @@ export const deleteOutingLogsBatch = async (logIds: string[]) => {
         batch.delete(doc(db, 'outingLogs', id));
     });
     await batch.commit();
+};
+
+/**
+ * Performs a targeted query to find a specific type of active outing for a student.
+ * This is used as a fallback for the Kiosk check-in when an outing is older than the 7-day live listener window.
+ */
+export const findActiveOutingForStudent = async (studentId: string, outingType: OutingType): Promise<OutingRecord | null> => {
+    const logsCollection = collection(db, 'outingLogs');
+    const q = query(
+        logsCollection,
+        where('studentId', '==', studentId),
+        where('outingType', '==', outingType),
+        where('checkInTime', '==', null),
+        limit(1) // There should only ever be one active log of a specific type
+    );
+
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) {
+        return null;
+    }
+    return fromFirestore<OutingRecord>(querySnapshot.docs[0]);
+};
+
+/**
+ * Performs a targeted query to find ANY active outing for a student, regardless of type.
+ * This is used by the Kiosk check-out process to prevent a student from having multiple concurrent active outings.
+ */
+export const findAnyActiveOutingForStudent = async (studentId: string): Promise<OutingRecord | null> => {
+    const logsCollection = collection(db, 'outingLogs');
+    const q = query(
+        logsCollection,
+        where('studentId', '==', studentId),
+        where('checkInTime', '==', null),
+        limit(1) // If there's any active log, we just need one to block the action.
+    );
+
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) {
+        return null;
+    }
+    return fromFirestore<OutingRecord>(querySnapshot.docs[0]);
 };
 
 

@@ -437,7 +437,7 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                     <button onClick={() => setFilter('departed')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'departed' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Departed</button>
                   </div>
                   <div className="flex items-center space-x-4 w-full md:w-auto">
-                    <input type="text" placeholder="Search Logs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-80 px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 bg-gray-100" />
+                    <input type="text" placeholder="Search Logs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-80 px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 bg-gray-100 text-gray-900" />
                     <button
                         onClick={handleExportToExcel}
                         className="flex-shrink-0 flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors"
