@@ -51,6 +51,28 @@ const loadModels = async (): Promise<boolean> => {
                     faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
                     faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
                 ]);
+
+                // --- WARM UP STEP ---
+                // We run a dummy detection on a small blank canvas. 
+                // This forces TensorFlow.js to compile the WebGL shaders and allocate GPU memory.
+                // Without this, the UI would freeze for 1-2 seconds on the very first user scan.
+                console.log("Warming up facial recognition models...");
+                try {
+                    const dummyCanvas = document.createElement('canvas');
+                    dummyCanvas.width = 50;
+                    dummyCanvas.height = 50;
+                    // We expect this to return undefined (no face), but the internal engine will spin up.
+                    await faceapi
+                        .detectSingleFace(dummyCanvas)
+                        .withFaceLandmarks()
+                        .withFaceDescriptor();
+                    console.log("Model warm-up complete.");
+                } catch (warmupError) {
+                    // It's okay if this fails (e.g. strict mode), main functionality might still work.
+                    console.warn("Model warm-up warning (non-fatal):", warmupError);
+                }
+                // --------------------
+
                 console.log("Facial recognition models loaded successfully.");
                 return true;
             } catch (error) {

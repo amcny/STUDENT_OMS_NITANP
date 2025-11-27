@@ -1,4 +1,3 @@
-
 import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { VisitorPassRecord } from '../types';
@@ -9,6 +8,7 @@ import GatePassPreviewModal from './GatePassPreviewModal';
 import Modal from './Modal';
 import CustomSelect from './CustomSelect';
 import { RELATION_OPTIONS, PERSON_TYPE_OPTIONS, PLACE_TO_VISIT_OPTIONS } from '../constants';
+import Spinner from './Spinner';
 
 // Allow TypeScript to recognize the XLSX global variable from the script tag
 declare var XLSX: any;
@@ -56,7 +56,14 @@ interface VisitorGatePassProps {
 }
 
 const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
-    const { visitorLogs, role } = useContext(AppContext);
+    const { visitorLogs: liveVisitorLogs, role } = useContext(AppContext);
+    
+    // --- View Mode & Archive State ---
+    const [viewMode, setViewMode] = useState<'live' | 'archive'>('live');
+    const [archivedLogs, setArchivedLogs] = useState<VisitorPassRecord[]>([]);
+    const [archiveDateRange, setArchiveDateRange] = useState({ start: '', end: '' });
+    const [isSearchingArchive, setIsSearchingArchive] = useState(false);
+
     const [formData, setFormData] = useState(INITIAL_FORM_DATA);
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,6 +89,11 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
         logs: VisitorPassRecord[];
         hasExported: boolean;
     }>({ range: '3m', logs: [], hasExported: false });
+    
+    // Export State
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [exportRange, setExportRange] = useState<'current' | '3m' | '6m' | '1y' | 'all'>('current');
+    const [isExporting, setIsExporting] = useState(false);
 
     const topRef = useRef<HTMLDivElement>(null);
     
@@ -90,6 +102,11 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
             topRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }, [notification]);
+
+    // Determine which logs to display based on view mode
+    const currentLogsSource = useMemo(() => {
+        return viewMode === 'live' ? liveVisitorLogs : archivedLogs;
+    }, [viewMode, liveVisitorLogs, archivedLogs]);
 
     useEffect(() => {
       if (!isBulkDeleteModalOpen) return;
@@ -105,9 +122,41 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
           }
       };
       const cutoffDate = getCutoffDate(bulkDeleteConfig.range);
-      const logsToPurge = cutoffDate === null ? visitorLogs : visitorLogs.filter(log => new Date(log.inTime) < cutoffDate);
+      const logsToPurge = cutoffDate === null ? currentLogsSource : currentLogsSource.filter(log => new Date(log.inTime) < cutoffDate);
       setBulkDeleteConfig(prev => ({ ...prev, logs: logsToPurge, hasExported: false }));
-    }, [isBulkDeleteModalOpen, bulkDeleteConfig.range, visitorLogs]);
+    }, [isBulkDeleteModalOpen, bulkDeleteConfig.range, currentLogsSource]);
+    
+    const handleArchiveSearch = async () => {
+      if (!archiveDateRange.start || !archiveDateRange.end) {
+          setNotification({ message: "Please select both start and end dates.", type: 'error' });
+          return;
+      }
+      
+      const start = new Date(archiveDateRange.start);
+      const end = new Date(archiveDateRange.end);
+      
+      if (start > end) {
+           setNotification({ message: "Start date cannot be after end date.", type: 'error' });
+           return;
+      }
+      
+      setIsSearchingArchive(true);
+      setNotification(null);
+      try {
+          const logs = await firebaseService.getArchivedVisitorLogs(start, end);
+          setArchivedLogs(logs);
+          if (logs.length === 0) {
+              setNotification({ message: "No records found for the selected date range.", type: 'info' });
+          } else {
+              setNotification({ message: `Found ${logs.length} archived records.`, type: 'success' });
+          }
+      } catch (error) {
+          console.error("Archive search failed:", error);
+          setNotification({ message: "Failed to fetch archived logs.", type: 'error' });
+      } finally {
+          setIsSearchingArchive(false);
+      }
+    };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -147,8 +196,8 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
         const dateStrForId = dateStr.replace(/-/g, '');
         
         // Filter by the date string we are using for the ID (local date)
-        // Fix: Firestore stores date as ISO string (timestamp), so we must split to get the date part
-        const todayLogs = visitorLogs.filter(log => {
+        // Firestore stores date as ISO string (timestamp), so we must split to get the date part
+        const todayLogs = liveVisitorLogs.filter(log => {
             if (!log.date) return false;
             // Handle both plain date strings and ISO timestamps just in case
             const logDatePart = log.date.includes('T') ? log.date.split('T')[0] : log.date;
@@ -214,7 +263,16 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
 
     const handleConfirmMarkOut = async () => {
         if (!logToMarkOut) return;
-        await firebaseService.updateVisitorLog(logToMarkOut.id, { outTime: new Date().toISOString(), outGateName: gate });
+        const updateData = { outTime: new Date().toISOString(), outGateName: gate };
+        await firebaseService.updateVisitorLog(logToMarkOut.id, updateData);
+        
+        // Update local archive state if in archive mode
+        if (viewMode === 'archive') {
+            setArchivedLogs(prev => prev.map(log => 
+                log.id === logToMarkOut.id ? { ...log, ...updateData } : log
+            ));
+        }
+        
         setLogToMarkOut(null);
     };
     
@@ -243,10 +301,18 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
         try {
             if (pinAction.action === 'singleDelete') {
                 await firebaseService.deleteVisitorLog(pinAction.log.id);
+                // Update local archive state if in archive mode
+                if (viewMode === 'archive') {
+                    setArchivedLogs(prev => prev.filter(log => log.id !== pinAction.log.id));
+                }
                 setNotification({ message: `Visitor log for ${pinAction.log.name} deleted successfully.`, type: 'success' });
             } else if (pinAction.action === 'bulkDelete') {
                 const idsToDelete = bulkDeleteConfig.logs.map(log => log.id);
                 await firebaseService.deleteVisitorLogsBatch(idsToDelete);
+                // Update local archive state if in archive mode
+                if (viewMode === 'archive') {
+                    setArchivedLogs(prev => prev.filter(log => !idsToDelete.includes(log.id)));
+                }
                 setBulkDeleteConfig({ range: '3m', logs: [], hasExported: false });
                 setNotification({ message: `${idsToDelete.length} visitor logs deleted successfully.`, type: 'success' });
             }
@@ -268,7 +334,7 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
 
 
     const sortedAndFilteredLogs = useMemo(() => {
-        return visitorLogs
+        return currentLogsSource
           .filter(log => {
             if (filter === 'inside') return log.outTime === null;
             if (filter === 'departed') return log.outTime !== null;
@@ -302,7 +368,7 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
             if (String(valA) > String(valB)) return sortConfig.direction === 'ascending' ? 1 : -1;
             return 0;
           });
-    }, [visitorLogs, filter, searchTerm, sortConfig]);
+    }, [currentLogsSource, filter, searchTerm, sortConfig]);
     
     const exportVisitorLogs = (logsToExport: VisitorPassRecord[], fileName: string) => {
         if (typeof XLSX === 'undefined') {
@@ -354,8 +420,49 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
         return true;
     };
 
-    const handleExportToExcel = () => {
-        exportVisitorLogs(sortedAndFilteredLogs, "Visitor_Logbook.xlsx");
+    const handleExportToExcel = async () => {
+        if (isExporting) return;
+        setIsExporting(true);
+        setNotification(null);
+
+        try {
+            let logsToExport: VisitorPassRecord[] = [];
+            let fileName = `Visitor_Logbook_${exportRange}.xlsx`;
+
+            if (exportRange === 'current') {
+                logsToExport = sortedAndFilteredLogs;
+                fileName = `Visitor_Logbook_ViewExport_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            } else {
+                 const endDate = new Date();
+                 const startDate = new Date();
+                 // Set start dates relative to today
+                 if (exportRange === '3m') startDate.setMonth(startDate.getMonth() - 3);
+                 else if (exportRange === '6m') startDate.setMonth(startDate.getMonth() - 6);
+                 else if (exportRange === '1y') startDate.setFullYear(startDate.getFullYear() - 1);
+                 else if (exportRange === 'all') startDate.setFullYear(2023, 0, 1); // Project Inception
+
+                 startDate.setHours(0, 0, 0, 0);
+
+                 logsToExport = await firebaseService.getArchivedVisitorLogs(startDate, endDate);
+                 fileName = `Visitor_Logbook_${exportRange === 'all' ? 'FULL_HISTORY' : exportRange}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            }
+            
+            if (logsToExport.length === 0) {
+                setNotification({ message: "No logs found for the selected range to export.", type: 'info' });
+            } else {
+                const success = exportVisitorLogs(logsToExport, fileName);
+                if(success) {
+                    setNotification({ message: `Successfully exported ${logsToExport.length} records.`, type: 'success' });
+                    setIsExportModalOpen(false);
+                }
+            }
+
+        } catch (e) {
+            console.error(e);
+            setNotification({ message: "Failed to export logs due to an error.", type: 'error' });
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     const handleExportForDeletion = () => {
@@ -430,6 +537,61 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
 
             <div className="bg-white p-8 rounded-lg shadow-lg max-w-screen-2xl mx-auto">
                 <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Visitor Logbook</h2>
+                
+                {/* --- View Mode Toggle & Archive Search Controls --- */}
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-6">
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div className="flex space-x-2">
+                            <button 
+                                onClick={() => setViewMode('live')} 
+                                className={`px-4 py-2 rounded-lg font-semibold transition-colors ${viewMode === 'live' ? 'bg-blue-600 text-white shadow' : 'bg-white text-blue-700 hover:bg-blue-100'}`}
+                            >
+                                Live View (Last 7 Days)
+                            </button>
+                            <button 
+                                onClick={() => setViewMode('archive')} 
+                                className={`px-4 py-2 rounded-lg font-semibold transition-colors ${viewMode === 'archive' ? 'bg-indigo-600 text-white shadow' : 'bg-white text-indigo-700 hover:bg-indigo-100'}`}
+                            >
+                                Archive Search (History)
+                            </button>
+                        </div>
+                        
+                        {viewMode === 'archive' && (
+                            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="date" 
+                                        value={archiveDateRange.start} 
+                                        onChange={(e) => setArchiveDateRange({...archiveDateRange, start: e.target.value})}
+                                        className="px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
+                                        placeholder="Start Date"
+                                    />
+                                    <span className="text-gray-500 font-bold">to</span>
+                                    <input 
+                                        type="date" 
+                                        value={archiveDateRange.end} 
+                                        onChange={(e) => setArchiveDateRange({...archiveDateRange, end: e.target.value})}
+                                        className="px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
+                                        placeholder="End Date"
+                                    />
+                                </div>
+                                <button 
+                                    onClick={handleArchiveSearch}
+                                    disabled={isSearchingArchive}
+                                    className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition flex items-center space-x-2 disabled:bg-indigo-400"
+                                >
+                                    {isSearchingArchive ? <Spinner /> : <span>Search Logs</span>}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    {viewMode === 'archive' && (
+                        <p className="text-xs text-indigo-800 mt-2">
+                        * Archive Search fetches data directly from the database. Searching very large ranges may take a moment.
+                        </p>
+                    )}
+                </div>
+
                  <div className="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
                   <div className="flex space-x-2">
                     <button onClick={() => setFilter('all')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}>All</button>
@@ -439,9 +601,9 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                   <div className="flex items-center space-x-4 w-full md:w-auto">
                     <input type="text" placeholder="Search Logs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-80 px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 bg-gray-100 text-gray-900" />
                     <button
-                        onClick={handleExportToExcel}
+                        onClick={() => setIsExportModalOpen(true)}
                         className="flex-shrink-0 flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors"
-                        title="Export current view to Excel"
+                        title="Export logs to Excel"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 9.293a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -476,32 +638,41 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                            {sortedAndFilteredLogs.map(log => (
-                                <tr key={log.id} className="hover:bg-gray-50">
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{log.passNumber}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.name}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{log.whomToMeet}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.inTime)}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{log.gateName}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.outTime)}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{log.outGateName || 'N/A'}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                        {log.outTime ? <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Departed</span> : <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">On Campus</span>}
-                                    </td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                                        <div className="flex items-center space-x-4">
-                                            {!log.outTime && <button onClick={() => setLogToMarkOut(log)} className="text-green-600 hover:text-green-900" title="Mark as Out">✓ Out</button>}
-                                            <button onClick={() => setPassToPreview(log)} className="text-blue-600 hover:text-blue-900" title="Reprint Pass">🖨️ Print</button>
-                                            {role === 'admin' && (
-                                                <button onClick={() => setLogToDelete(log)} className="text-red-600 hover:text-red-900" title="Delete Log">🗑️ Delete</button>
-                                            )}
-                                        </div>
+                            {sortedAndFilteredLogs.length > 0 ? (
+                                sortedAndFilteredLogs.map(log => (
+                                    <tr key={log.id} className="hover:bg-gray-50">
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{log.passNumber}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.name}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{log.whomToMeet}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.inTime)}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{log.gateName}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTime(log.outTime)}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{log.outGateName || 'N/A'}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm">
+                                            {log.outTime ? <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Departed</span> : <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">On Campus</span>}
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
+                                            <div className="flex items-center space-x-4">
+                                                {!log.outTime && <button onClick={() => setLogToMarkOut(log)} className="text-green-600 hover:text-green-900" title="Mark as Out">✓ Out</button>}
+                                                <button onClick={() => setPassToPreview(log)} className="text-blue-600 hover:text-blue-900" title="Reprint Pass">🖨️ Print</button>
+                                                {role === 'admin' && (
+                                                    <button onClick={() => setLogToDelete(log)} className="text-red-600 hover:text-red-900" title="Delete Log">🗑️ Delete</button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={9} className="text-center py-10 text-gray-500">
+                                        {viewMode === 'live' 
+                                            ? "No visitor logs found in the last 7 days." 
+                                            : "No visitor logs found for the selected date range."}
                                     </td>
                                 </tr>
-                            ))}
+                            )}
                         </tbody>
                     </table>
-                     {sortedAndFilteredLogs.length === 0 && <div className="text-center py-10 text-gray-500">No visitor logs found.</div>}
                 </div>
             </div>
 
@@ -598,6 +769,71 @@ const VisitorGatePass: React.FC<VisitorGatePassProps> = ({ gate }) => {
                       </button>
                   </div>
               </div>
+            </Modal>
+            
+            <Modal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} title="Export Visitor Logs to Excel">
+                <div className="space-y-6">
+                    <p className="text-gray-600">Select the range of data you would like to export. Historical data will be fetched from the database.</p>
+                    
+                    <div className="grid grid-cols-1 gap-3">
+                        <label className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-between ${exportRange === 'current' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-50 border-gray-300'}`}>
+                            <div>
+                                <span className="font-bold text-gray-800 block">Current View</span>
+                                <span className="text-sm text-gray-500">Exports only what is currently visible in the table filters.</span>
+                            </div>
+                            <input type="radio" name="exportRange" value="current" checked={exportRange === 'current'} onChange={() => setExportRange('current')} className="h-5 w-5 text-blue-600" />
+                        </label>
+
+                        <label className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-between ${exportRange === '3m' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-50 border-gray-300'}`}>
+                            <div>
+                                <span className="font-bold text-gray-800 block">Last 3 Months</span>
+                                <span className="text-sm text-gray-500">Fetches all records from the last 90 days.</span>
+                            </div>
+                            <input type="radio" name="exportRange" value="3m" checked={exportRange === '3m'} onChange={() => setExportRange('3m')} className="h-5 w-5 text-blue-600" />
+                        </label>
+
+                        <label className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-between ${exportRange === '6m' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-50 border-gray-300'}`}>
+                            <div>
+                                <span className="font-bold text-gray-800 block">Last 6 Months</span>
+                                <span className="text-sm text-gray-500">Fetches all records from the last 180 days.</span>
+                            </div>
+                            <input type="radio" name="exportRange" value="6m" checked={exportRange === '6m'} onChange={() => setExportRange('6m')} className="h-5 w-5 text-blue-600" />
+                        </label>
+
+                        <label className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-between ${exportRange === '1y' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-50 border-gray-300'}`}>
+                            <div>
+                                <span className="font-bold text-gray-800 block">Last 1 Year</span>
+                                <span className="text-sm text-gray-500">Fetches all records from the past 365 days.</span>
+                            </div>
+                            <input type="radio" name="exportRange" value="1y" checked={exportRange === '1y'} onChange={() => setExportRange('1y')} className="h-5 w-5 text-blue-600" />
+                        </label>
+                        
+                        <label className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-between ${exportRange === 'all' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-50 border-gray-300'}`}>
+                            <div>
+                                <span className="font-bold text-gray-800 block">All Logs (Full History)</span>
+                                <span className="text-sm text-gray-500">Fetches every log since system inception.</span>
+                            </div>
+                            <input type="radio" name="exportRange" value="all" checked={exportRange === 'all'} onChange={() => setExportRange('all')} className="h-5 w-5 text-blue-600" />
+                        </label>
+                    </div>
+                    
+                    <div className="flex justify-end space-x-3 pt-4 border-t">
+                        <button 
+                            onClick={() => setIsExportModalOpen(false)}
+                            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold"
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            onClick={handleExportToExcel}
+                            disabled={isExporting}
+                            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold flex items-center gap-2 disabled:bg-green-400"
+                        >
+                            {isExporting ? <Spinner /> : <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 9.293a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>}
+                            <span>{isExporting ? 'Fetching & Exporting...' : 'Export to Excel'}</span>
+                        </button>
+                    </div>
+                </div>
             </Modal>
             
             <Modal isOpen={!!pinAction} onClose={handleClosePinModal} title="Security Verification" size="sm">

@@ -175,6 +175,30 @@ export const onVisitorLogsUpdate = (callback: (logs: VisitorPassRecord[]) => voi
   });
 };
 
+/**
+ * Fetches historical visitor logs for a specific date range.
+ * Used for the "Archive Search" feature in the Visitor Logbook.
+ * @param startDate Start date of the range (inclusive)
+ * @param endDate End date of the range (inclusive)
+ */
+export const getArchivedVisitorLogs = async (startDate: Date, endDate: Date): Promise<VisitorPassRecord[]> => {
+    const logsCollection = collection(db, 'visitorLogs');
+    
+    // Ensure endDate includes the full day (set to end of day)
+    const endOfDay = new Date(endDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const q = query(
+        logsCollection,
+        where('inTime', '>=', Timestamp.fromDate(startDate)),
+        where('inTime', '<=', Timestamp.fromDate(endOfDay)),
+        orderBy('inTime', 'desc')
+    );
+
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => fromFirestore<VisitorPassRecord>(doc));
+};
+
 // --- User/Auth Management ---
 
 export const recordUserLogin = async (uid: string, email: string, role: string, gateName: string): Promise<string | null> => {

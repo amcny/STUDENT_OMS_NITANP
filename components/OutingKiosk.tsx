@@ -1,3 +1,4 @@
+
 import React, { useState, useContext } from 'react';
 import { OutingType, OutingRecord, Student } from '../types';
 import { AppContext } from '../App';
@@ -40,7 +41,8 @@ const OutingKiosk: React.FC<OutingKioskProps> = ({ gate }) => {
   const handleRetryScan = () => {
     setAlert(null);
     setScanFailed(false);
-    setIsCameraOpen(true);
+    setCurrentAction(null);
+    // setIsCameraOpen(true); // Removed to allow user to re-select action
   };
 
   const onCapture = async (imageBase64: string) => {
