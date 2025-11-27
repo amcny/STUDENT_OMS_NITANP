@@ -10,6 +10,7 @@ import ConfirmationModal from './ConfirmationModal';
 import Alert from './Alert';
 import CustomSelect from './CustomSelect';
 import Modal from './Modal';
+import Spinner from './Spinner';
 
 // Allow TypeScript to recognize the XLSX global variable from the script tag
 declare var XLSX: any;
@@ -48,7 +49,14 @@ interface LogbookProps {
 }
 
 const Logbook: React.FC<LogbookProps> = ({ gate }) => {
-  const { outingLogs, students, role } = useContext(AppContext);
+  const { outingLogs: liveOutingLogs, students, role } = useContext(AppContext);
+  
+  // View Mode: 'live' uses real-time context data (last 7 days + active), 'archive' uses fetched history.
+  const [viewMode, setViewMode] = useState<'live' | 'archive'>('live');
+  const [archivedLogs, setArchivedLogs] = useState<OutingRecord[]>([]);
+  const [archiveDateRange, setArchiveDateRange] = useState({ start: '', end: '' });
+  const [isSearchingArchive, setIsSearchingArchive] = useState(false);
+
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'overdue'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -84,6 +92,11 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
       hasExported: boolean;
   }>({ range: '3m', logs: [], hasExported: false });
 
+  // Export State
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportRange, setExportRange] = useState<'current' | '3m' | '6m' | '1y' | 'all'>('current');
+  const [isExporting, setIsExporting] = useState(false);
+
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -103,9 +116,14 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
       }
   }, [manualEntryAlert]);
 
+  // Determine which logs to display based on view mode
+  const currentLogsSource = useMemo(() => {
+    return viewMode === 'live' ? liveOutingLogs : archivedLogs;
+  }, [viewMode, liveOutingLogs, archivedLogs]);
+
   const overdueLogs = useMemo(() => {
     const now = new Date();
-    return outingLogs.filter(log => {
+    return currentLogsSource.filter(log => {
         if (log.checkInTime !== null || log.overdueResolved) return false;
         const checkOutDate = new Date(log.checkOutTime);
         let deadline: Date;
@@ -116,7 +134,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         }
         return now > deadline;
     });
-  }, [outingLogs]);
+  }, [currentLogsSource]);
 
   useEffect(() => {
       if (!isBulkDeleteModalOpen) return;
@@ -132,9 +150,41 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
           }
       };
       const cutoffDate = getCutoffDate(bulkDeleteConfig.range);
-      const logsToPurge = cutoffDate === null ? outingLogs : outingLogs.filter(log => new Date(log.checkOutTime) < cutoffDate);
+      const logsToPurge = cutoffDate === null ? currentLogsSource : currentLogsSource.filter(log => new Date(log.checkOutTime) < cutoffDate);
       setBulkDeleteConfig(prev => ({ ...prev, logs: logsToPurge, hasExported: false }));
-  }, [isBulkDeleteModalOpen, bulkDeleteConfig.range, outingLogs]);
+  }, [isBulkDeleteModalOpen, bulkDeleteConfig.range, currentLogsSource]);
+  
+  const handleArchiveSearch = async () => {
+      if (!archiveDateRange.start || !archiveDateRange.end) {
+          setManualEntryAlert({ message: "Please select both start and end dates.", type: 'error' });
+          return;
+      }
+      
+      const start = new Date(archiveDateRange.start);
+      const end = new Date(archiveDateRange.end);
+      
+      if (start > end) {
+           setManualEntryAlert({ message: "Start date cannot be after end date.", type: 'error' });
+           return;
+      }
+      
+      setIsSearchingArchive(true);
+      setManualEntryAlert(null);
+      try {
+          const logs = await firebaseService.getArchivedOutingLogs(start, end);
+          setArchivedLogs(logs);
+          if (logs.length === 0) {
+              setManualEntryAlert({ message: "No records found for the selected date range.", type: 'info' });
+          } else {
+              setManualEntryAlert({ message: `Found ${logs.length} archived records.`, type: 'success' });
+          }
+      } catch (error) {
+          console.error("Archive search failed:", error);
+          setManualEntryAlert({ message: "Failed to fetch archived logs.", type: 'error' });
+      } finally {
+          setIsSearchingArchive(false);
+      }
+  };
 
   const handleManualSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const term = e.target.value;
@@ -187,6 +237,10 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
 
   const handleSaveRemarks = async (logId: string, remarks: string) => {
     await firebaseService.updateOutingLog(logId, { remarks });
+    // Update local archive state if in archive mode to reflect change immediately without refetch
+    if (viewMode === 'archive') {
+        setArchivedLogs(prev => prev.map(log => log.id === logId ? { ...log, remarks } : log));
+    }
   };
   
   const handleConfirmStatusToggle = async () => {
@@ -212,6 +266,14 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     }
     
     await firebaseService.updateOutingLog(logToToggleStatus.id, updateData);
+    
+     // Update local archive state if in archive mode
+    if (viewMode === 'archive') {
+        setArchivedLogs(prev => prev.map(log => 
+            log.id === logToToggleStatus.id ? { ...log, ...updateData } : log
+        ));
+    }
+    
     setLogToToggleStatus(null);
   };
 
@@ -223,6 +285,14 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
       remarks: logToResolve.remarks ? `${logToResolve.remarks}; ${newRemark}` : newRemark,
     };
     await firebaseService.updateOutingLog(logToResolve.id, updatedData);
+    
+    // Update local archive state if in archive mode
+    if (viewMode === 'archive') {
+        setArchivedLogs(prev => prev.map(log => 
+            log.id === logToResolve.id ? { ...log, ...updatedData } : log
+        ));
+    }
+    
     setLogToResolve(null);
   };
 
@@ -236,7 +306,9 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     const student = selectedStudentForManualEntry;
 
     if (action === 'check-out') {
-        const hasActiveOuting = outingLogs.some(log => log.studentId === student.id && log.checkInTime === null);
+        // Check both live logs and potentially DB for active logs to be safe, 
+        // though kiosk does strictly. Here we check context for speed.
+        const hasActiveOuting = liveOutingLogs.some(log => log.studentId === student.id && log.checkInTime === null);
         if (hasActiveOuting) {
             setManualEntryAlert({ message: `${student.name} already has an active outing.`, type: 'error' });
             return;
@@ -260,19 +332,14 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         setManualEntryAlert({ message: `${student.name} checked out successfully.`, type: 'success'});
 
     } else { // Check-in
-        const activeLog = outingLogs.find(log => 
+        const activeLog = liveOutingLogs.find(log => 
             log.studentId === student.id && 
             log.checkInTime === null &&
             log.outingType === manualOutingType
         );
 
         if (!activeLog) {
-            const otherActiveOuting = outingLogs.find(log => log.studentId === student.id && log.checkInTime === null);
-            if (otherActiveOuting) {
-                 setManualEntryAlert({ message: `${student.name} has an active '${otherActiveOuting.outingType}' outing. Please select the correct outing type to check them in.`, type: 'error' });
-            } else {
-                 setManualEntryAlert({ message: `No active '${manualOutingType}' outing found for ${student.name}.`, type: 'error' });
-            }
+             setManualEntryAlert({ message: `No active '${manualOutingType}' outing found for ${student.name} in current records.`, type: 'error' });
             return;
         }
 
@@ -290,7 +357,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
 
   const sortedAndFilteredLogs = useMemo(() => {
     const overdueIds = new Set(overdueLogs.map(l => l.id));
-    let filtered = outingLogs
+    let filtered = currentLogsSource
       .filter(log => {
         if (filter === 'overdue') return overdueIds.has(log.id);
         if (filter === 'active') return log.checkInTime === null;
@@ -337,7 +404,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         return 0;
     });
 
-  }, [outingLogs, filter, searchTerm, sortConfig, studentMap, overdueLogs]);
+  }, [currentLogsSource, filter, searchTerm, sortConfig, studentMap, overdueLogs]);
 
   const exportLogs = (logsToExport: OutingRecord[], fileName: string) => {
     if (typeof XLSX === 'undefined') {
@@ -389,8 +456,50 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
     return true;
   };
 
-  const handleExportToExcel = () => {
-    exportLogs(sortedAndFilteredLogs, "Student_Outing_Logbook.xlsx");
+  const handleExportToExcel = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    setManualEntryAlert(null);
+
+    try {
+        let logsToExport: OutingRecord[] = [];
+        let fileName = `Student_Outing_Logbook_${exportRange}.xlsx`;
+
+        if (exportRange === 'current') {
+            logsToExport = sortedAndFilteredLogs;
+            fileName = `Student_Outing_Logbook_ViewExport_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        } else {
+             const endDate = new Date();
+             const startDate = new Date();
+             // Set start dates relative to today
+             if (exportRange === '3m') startDate.setMonth(startDate.getMonth() - 3);
+             else if (exportRange === '6m') startDate.setMonth(startDate.getMonth() - 6);
+             else if (exportRange === '1y') startDate.setFullYear(startDate.getFullYear() - 1);
+             else if (exportRange === 'all') startDate.setFullYear(2023, 0, 1); // Project Inception (Safe default)
+
+             // Reset time to start of day for cleaner queries
+             startDate.setHours(0, 0, 0, 0);
+
+             logsToExport = await firebaseService.getArchivedOutingLogs(startDate, endDate);
+             fileName = `Student_Outing_Logbook_${exportRange === 'all' ? 'FULL_HISTORY' : exportRange}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        }
+        
+        if (logsToExport.length === 0) {
+            setManualEntryAlert({ message: "No logs found for the selected range to export.", type: 'info' });
+        } else {
+            const success = exportLogs(logsToExport, fileName);
+            if(success) {
+                setManualEntryAlert({ message: `Successfully exported ${logsToExport.length} records.`, type: 'success' });
+                setIsExportModalOpen(false);
+            }
+        }
+
+    } catch (e) {
+        console.error(e);
+        setManualEntryAlert({ message: "Failed to export logs due to an error.", type: 'error' });
+    } finally {
+        setIsExporting(false);
+    }
   };
 
   const handleExportForDeletion = () => {
@@ -424,11 +533,19 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         if (pinAction.action === 'singleDelete') {
             await firebaseService.deleteOutingLog(pinAction.log.id);
             deletedCount = 1;
+             // Update local archive state if in archive mode
+            if (viewMode === 'archive') {
+                setArchivedLogs(prev => prev.filter(log => log.id !== pinAction.log.id));
+            }
         } else if (pinAction.action === 'bulkDelete') {
             const idsToDelete = bulkDeleteConfig.logs.map(log => log.id);
             await firebaseService.deleteOutingLogsBatch(idsToDelete);
             deletedCount = idsToDelete.length;
             setBulkDeleteConfig({ range: '3m', logs: [], hasExported: false });
+            // Update local archive state if in archive mode
+            if (viewMode === 'archive') {
+                setArchivedLogs(prev => prev.filter(log => !idsToDelete.includes(log.id)));
+            }
         } else if (pinAction.action === 'editRemarks') {
              setLogToEditRemarks(pinAction.log);
              setPinAction(null); setPinInput(''); setPinError('');
@@ -460,7 +577,61 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
       <div ref={topRef} className="bg-white p-8 rounded-lg shadow-lg max-w-screen-2xl mx-auto">
         <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Outing Logbook</h2>
         
-        {overdueLogs.length > 0 && filter !== 'overdue' && (
+        {/* --- View Mode Toggle & Archive Search Controls --- */}
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-6">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                 <div className="flex space-x-2">
+                     <button 
+                        onClick={() => setViewMode('live')} 
+                        className={`px-4 py-2 rounded-lg font-semibold transition-colors ${viewMode === 'live' ? 'bg-blue-600 text-white shadow' : 'bg-white text-blue-700 hover:bg-blue-100'}`}
+                     >
+                         Live View (Last 7 Days)
+                     </button>
+                     <button 
+                        onClick={() => setViewMode('archive')} 
+                        className={`px-4 py-2 rounded-lg font-semibold transition-colors ${viewMode === 'archive' ? 'bg-indigo-600 text-white shadow' : 'bg-white text-indigo-700 hover:bg-indigo-100'}`}
+                     >
+                         Archive Search (History)
+                     </button>
+                 </div>
+                 
+                 {viewMode === 'archive' && (
+                     <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                         <div className="flex items-center gap-2">
+                             <input 
+                                type="date" 
+                                value={archiveDateRange.start} 
+                                onChange={(e) => setArchiveDateRange({...archiveDateRange, start: e.target.value})}
+                                className="px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
+                                placeholder="Start Date"
+                             />
+                             <span className="text-gray-500 font-bold">to</span>
+                             <input 
+                                type="date" 
+                                value={archiveDateRange.end} 
+                                onChange={(e) => setArchiveDateRange({...archiveDateRange, end: e.target.value})}
+                                className="px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
+                                placeholder="End Date"
+                             />
+                         </div>
+                         <button 
+                            onClick={handleArchiveSearch}
+                            disabled={isSearchingArchive}
+                            className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition flex items-center space-x-2 disabled:bg-indigo-400"
+                         >
+                            {isSearchingArchive ? <Spinner /> : <span>Search Logs</span>}
+                         </button>
+                     </div>
+                 )}
+            </div>
+            {viewMode === 'archive' && (
+                <p className="text-xs text-indigo-800 mt-2">
+                   * Archive Search fetches data directly from the database. Searching very large ranges may take a moment.
+                </p>
+            )}
+        </div>
+
+        {overdueLogs.length > 0 && filter !== 'overdue' && viewMode === 'live' && (
           <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg shadow-md">
             <div className="flex items-center">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-500 mr-4 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
@@ -476,6 +647,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
           </div>
         )}
 
+        {/* Manual Entry only available in Live View typically, but allowed in Archive for correction */}
         <div className="bg-slate-50 p-6 rounded-lg shadow-md mb-6 border border-slate-200">
             <h3 className="text-xl font-bold text-gray-800 mb-4">Manual Gate Entry</h3>
             {manualEntryAlert && <div className="mb-4"><Alert message={manualEntryAlert.message} type={manualEntryAlert.type} onClose={() => setManualEntryAlert(null)} /></div>}
@@ -569,17 +741,17 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
 
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
             <div className="flex flex-wrap gap-2">
-                <button onClick={() => setFilter('all')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}>All Logs ({outingLogs.length})</button>
-                <button onClick={() => setFilter('active')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'active' ? 'bg-yellow-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Active ({outingLogs.filter(l => !l.checkInTime).length})</button>
+                <button onClick={() => setFilter('all')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}>All Logs ({currentLogsSource.length})</button>
+                <button onClick={() => setFilter('active')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'active' ? 'bg-yellow-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Active ({currentLogsSource.filter(l => !l.checkInTime).length})</button>
                 <button onClick={() => setFilter('completed')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'completed' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Completed</button>
                 <button onClick={() => setFilter('overdue')} className={`px-4 py-2 text-sm font-medium rounded-md ${filter === 'overdue' ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700'}`}>Overdue ({overdueLogs.length})</button>
             </div>
             <div className="flex items-center space-x-4 w-full md:w-auto">
                 <input type="text" placeholder="Search Logs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-80 px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 bg-gray-100 text-gray-900" />
                 <button
-                    onClick={handleExportToExcel}
+                    onClick={() => setIsExportModalOpen(true)}
                     className="flex-shrink-0 flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors"
-                    title="Export current view to Excel"
+                    title="Export logs to Excel"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 9.293a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                     <span>Export</span>
@@ -691,7 +863,9 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
               ) : (
                 <tr>
                   <td colSpan={11} className="text-center py-10 text-gray-500">
-                    No logs found matching your criteria.
+                    {viewMode === 'live' 
+                        ? "No logs found matching your criteria in the last 7 days." 
+                        : "No logs found for the selected date range."}
                   </td>
                 </tr>
               )}
@@ -835,6 +1009,71 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
       </div>
     </Modal>
     
+    <Modal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} title="Export Logs to Excel">
+        <div className="space-y-6">
+            <p className="text-gray-600">Select the range of data you would like to export. Historical data will be fetched from the database.</p>
+            
+            <div className="grid grid-cols-1 gap-3">
+                 <label className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-between ${exportRange === 'current' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-50 border-gray-300'}`}>
+                    <div>
+                        <span className="font-bold text-gray-800 block">Current View</span>
+                        <span className="text-sm text-gray-500">Exports only what is currently visible in the table filters.</span>
+                    </div>
+                    <input type="radio" name="exportRange" value="current" checked={exportRange === 'current'} onChange={() => setExportRange('current')} className="h-5 w-5 text-blue-600" />
+                 </label>
+
+                 <label className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-between ${exportRange === '3m' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-50 border-gray-300'}`}>
+                    <div>
+                        <span className="font-bold text-gray-800 block">Last 3 Months</span>
+                        <span className="text-sm text-gray-500">Fetches all records from the last 90 days.</span>
+                    </div>
+                    <input type="radio" name="exportRange" value="3m" checked={exportRange === '3m'} onChange={() => setExportRange('3m')} className="h-5 w-5 text-blue-600" />
+                 </label>
+
+                 <label className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-between ${exportRange === '6m' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-50 border-gray-300'}`}>
+                    <div>
+                        <span className="font-bold text-gray-800 block">Last 6 Months</span>
+                        <span className="text-sm text-gray-500">Fetches all records from the last 180 days.</span>
+                    </div>
+                    <input type="radio" name="exportRange" value="6m" checked={exportRange === '6m'} onChange={() => setExportRange('6m')} className="h-5 w-5 text-blue-600" />
+                 </label>
+
+                 <label className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-between ${exportRange === '1y' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-50 border-gray-300'}`}>
+                    <div>
+                        <span className="font-bold text-gray-800 block">Last 1 Year</span>
+                        <span className="text-sm text-gray-500">Fetches all records from the past 365 days.</span>
+                    </div>
+                    <input type="radio" name="exportRange" value="1y" checked={exportRange === '1y'} onChange={() => setExportRange('1y')} className="h-5 w-5 text-blue-600" />
+                 </label>
+                 
+                 <label className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-between ${exportRange === 'all' ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-50 border-gray-300'}`}>
+                    <div>
+                        <span className="font-bold text-gray-800 block">All Logs (Full History)</span>
+                        <span className="text-sm text-gray-500">Fetches every log since system inception.</span>
+                    </div>
+                    <input type="radio" name="exportRange" value="all" checked={exportRange === 'all'} onChange={() => setExportRange('all')} className="h-5 w-5 text-blue-600" />
+                 </label>
+            </div>
+            
+            <div className="flex justify-end space-x-3 pt-4 border-t">
+                <button 
+                    onClick={() => setIsExportModalOpen(false)}
+                    className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold"
+                >
+                    Cancel
+                </button>
+                <button 
+                    onClick={handleExportToExcel}
+                    disabled={isExporting}
+                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold flex items-center gap-2 disabled:bg-green-400"
+                >
+                    {isExporting ? <Spinner /> : <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 9.293a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>}
+                    <span>{isExporting ? 'Fetching & Exporting...' : 'Export to Excel'}</span>
+                </button>
+            </div>
+        </div>
+    </Modal>
+
     <Modal isOpen={!!pinAction} onClose={handlePinModalClose} title="Security Verification" size="sm">
         <div className="space-y-4">
             <p className="text-gray-700 text-center">

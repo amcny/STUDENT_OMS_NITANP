@@ -128,6 +128,30 @@ export const onOutingLogsUpdate = (callback: (logs: OutingRecord[]) => void) => 
   };
 };
 
+/**
+ * Fetches historical outing logs for a specific date range.
+ * Used for the "Archive Search" feature in the Logbook.
+ * @param startDate Start date of the range (inclusive)
+ * @param endDate End date of the range (inclusive)
+ */
+export const getArchivedOutingLogs = async (startDate: Date, endDate: Date): Promise<OutingRecord[]> => {
+    const logsCollection = collection(db, 'outingLogs');
+    
+    // Ensure endDate includes the full day (set to end of day)
+    const endOfDay = new Date(endDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const q = query(
+        logsCollection,
+        where('checkOutTime', '>=', Timestamp.fromDate(startDate)),
+        where('checkOutTime', '<=', Timestamp.fromDate(endOfDay)),
+        orderBy('checkOutTime', 'desc')
+    );
+
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => fromFirestore<OutingRecord>(doc));
+};
+
 
 /**
  * OPTIMIZED LISTENER: Only fetches visitor logs from the last 7 days.
