@@ -23,6 +23,44 @@ const INITIAL_FORM_DATA = {
     branch: '', year: '', gender: '', studentType: '', hostel: '', roomNumber: '',
 };
 
+// --- Image Compression Utility ---
+const compressImage = (base64Str: string, maxWidth = 600, maxHeight = 600): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      // Calculate new dimensions while maintaining aspect ratio
+      if (width > height) {
+        if (width > maxWidth) {
+          height *= maxWidth / width;
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width *= maxHeight / height;
+          height = maxHeight;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          // Compress to JPEG at 0.8 quality
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
+      } else {
+          resolve(base64Str); // Fallback to original if context fails
+      }
+    };
+    img.onerror = () => resolve(base64Str); // Fallback to original on error
+  });
+};
+
 
 const RegisterStudent: React.FC = () => {
   const { students, role } = useContext(AppContext);
@@ -62,8 +100,9 @@ const RegisterStudent: React.FC = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleCapture = (imageBase64: string) => {
-    setFaceImage(imageBase64);
+  const handleCapture = async (imageBase64: string) => {
+    const compressed = await compressImage(imageBase64);
+    setFaceImage(compressed);
     setIsCameraOpen(false);
   };
 
@@ -77,11 +116,15 @@ const RegisterStudent: React.FC = () => {
       if (!file.type.startsWith('image/')) {
         setAlert({ message: 'Please select a valid image file.', type: 'error' }); return;
       }
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        setAlert({ message: 'File is too large. Please select an image under 5MB.', type: 'error' }); return;
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit (we compress it anyway)
+        setAlert({ message: 'File is too large. Please select an image under 10MB.', type: 'error' }); return;
       }
       const reader = new FileReader();
-      reader.onload = () => setFaceImage(reader.result as string);
+      reader.onload = async () => {
+          const rawBase64 = reader.result as string;
+          const compressedBase64 = await compressImage(rawBase64);
+          setFaceImage(compressedBase64);
+      };
       reader.readAsDataURL(file);
     }
     e.target.value = '';
@@ -126,6 +169,50 @@ const RegisterStudent: React.FC = () => {
     }
   };
   
+  const handleDownloadTemplate = () => {
+    if (typeof XLSX === 'undefined') {
+        setExcelImportStatus({ message: 'Excel library not loaded. Please refresh.', type: 'error' });
+        return;
+    }
+    
+    // Sample row to guide the user
+    const sampleData = [
+        {
+            name: "STUDENT NAME",
+            registrationNumber: "9xxxxxx",
+            rollNumber: "6xxxxx",
+            contactNumber: "9876543210",
+            branch: "Computer Science & Engg.",
+            year: "IV",
+            gender: "Male",
+            studentType: "Hosteller",
+            hostel: "Godavari",
+            roomNumber: "F-31"
+        }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(sampleData);
+    
+    // Add column widths for better readability
+    const wscols = [
+        {wch: 20}, // name
+        {wch: 20}, // registrationNumber
+        {wch: 15}, // rollNumber
+        {wch: 15}, // contactNumber
+        {wch: 30}, // branch
+        {wch: 10}, // year
+        {wch: 10}, // gender
+        {wch: 15}, // studentType
+        {wch: 15}, // hostel
+        {wch: 10}  // roomNumber
+    ];
+    ws['!cols'] = wscols;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Student Template");
+    XLSX.writeFile(wb, "Student_Registration_Template.xlsx");
+  };
+
   const handleExcelImportClick = () => {
     setExcelImportStatus(null);
     excelInputRef.current?.click();
@@ -261,8 +348,11 @@ const RegisterStudent: React.FC = () => {
 
               try {
                   const base64Image = await readFileAsBase64(file);
-                  const features = await extractFaceFeatures(base64Image);
-                  await firebaseService.updateStudentPhotoByRegNo(registrationNumber, base64Image, features);
+                  // COMPRESSION STEP
+                  const compressedImage = await compressImage(base64Image);
+                  
+                  const features = await extractFaceFeatures(compressedImage);
+                  await firebaseService.updateStudentPhotoByRegNo(registrationNumber, compressedImage, features);
                   successCount++;
               } catch (error) {
                   console.error(`Failed to process image for ${registrationNumber}:`, error);
@@ -365,7 +455,17 @@ const RegisterStudent: React.FC = () => {
                 
                 {/* Excel Import */}
                 <div className="p-4 rounded-lg bg-slate-50 border space-y-3">
-                    <h4 className="text-lg font-semibold text-gray-600">1. Import from Excel</h4>
+                    <div className="flex justify-between items-center">
+                        <h4 className="text-lg font-semibold text-gray-600">1. Import from Excel</h4>
+                         <button 
+                            type="button"
+                            onClick={handleDownloadTemplate} 
+                            className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center space-x-1"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            <span>Download Template</span>
+                        </button>
+                    </div>
                     <p className="text-sm text-gray-600">Upload an .xlsx file with student data. Required columns: <strong className="text-gray-800">name, registrationNumber</strong>. Other columns are optional.</p>
                     <button type="button" onClick={handleExcelImportClick} disabled={isImportingExcel || isImportingPhotos} className="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition w-full flex items-center justify-center space-x-2 disabled:bg-gray-400"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg><span>{isImportingExcel ? 'Importing...' : 'Import from Excel'}</span></button>
                     <input type="file" ref={excelInputRef} onChange={handleExcelFileSelected} className="hidden" accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />

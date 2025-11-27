@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Student } from '../types';
 import Modal from './Modal';
@@ -17,6 +18,44 @@ interface EditStudentModalProps {
     onSave: (updatedStudent: Student, newPhotoBase64?: string | null) => void;
     allStudents: Student[];
 }
+
+// --- Image Compression Utility ---
+const compressImage = (base64Str: string, maxWidth = 600, maxHeight = 600): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64Str;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+  
+        // Calculate new dimensions while maintaining aspect ratio
+        if (width > height) {
+          if (width > maxWidth) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
+        }
+  
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            // Compress to JPEG at 0.8 quality
+            resolve(canvas.toDataURL('image/jpeg', 0.8));
+        } else {
+            resolve(base64Str); // Fallback to original if context fails
+        }
+      };
+      img.onerror = () => resolve(base64Str); // Fallback to original on error
+    });
+  };
 
 const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, student, onSave, allStudents }) => {
     const [formData, setFormData] = useState<Student | null>(student);
@@ -64,8 +103,9 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
         });
     };
 
-    const handleCapture = (imageBase64: string) => {
-        setFaceImage(imageBase64);
+    const handleCapture = async (imageBase64: string) => {
+        const compressed = await compressImage(imageBase64);
+        setFaceImage(compressed);
         setIsCameraOpen(false);
     };
 
@@ -80,14 +120,16 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
                 setAlert({ message: 'Please select a valid image file.', type: 'error' });
                 return;
             }
-            if (file.size > 5 * 1024 * 1024) { // 5MB limit
-                 setAlert({ message: 'File is too large. Please select an image under 5MB.', type: 'error' });
+            if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                 setAlert({ message: 'File is too large. Please select an image under 10MB.', type: 'error' });
                 return;
             }
     
             const reader = new FileReader();
-            reader.onload = () => {
-                setFaceImage(reader.result as string);
+            reader.onload = async () => {
+                const rawBase64 = reader.result as string;
+                const compressed = await compressImage(rawBase64);
+                setFaceImage(compressed);
             };
             reader.onerror = () => {
                 setAlert({ message: 'Failed to read the image file.', type: 'error' });
