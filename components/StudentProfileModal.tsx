@@ -39,7 +39,6 @@ const StudentProfileModal: React.FC<StudentProfileModalProps> = ({ isOpen, onClo
           <p className="text-sm text-gray-500">{student.rollNumber}</p>
           <div className="mt-4 border-t border-gray-200">
             <dl className="divide-y divide-gray-200">
-              {detailItem('Registration No.', student.registrationNumber)}
               {detailItem('Branch', student.branch)}
               {detailItem('Year', student.year)}
               {detailItem('Gender', student.gender)}

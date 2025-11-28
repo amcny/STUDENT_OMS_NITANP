@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Student } from '../types';
 import Modal from './Modal';
@@ -83,7 +84,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        const uppercaseFields = ['name', 'rollNumber', 'registrationNumber', 'roomNumber'];
+        const uppercaseFields = ['name', 'rollNumber', 'roomNumber'];
         const processedValue = uppercaseFields.includes(name) ? value.toUpperCase() : value;
         
         setFormData(prev => prev ? { ...prev, [name]: processedValue } : null);
@@ -148,10 +149,6 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
             setAlert({ message: 'Another student with this Roll Number already exists.', type: 'error' });
             return;
         }
-        if (otherStudents.some(s => s.registrationNumber === formData.registrationNumber)) {
-            setAlert({ message: 'Another student with this Registration Number already exists.', type: 'error' });
-            return;
-        }
 
         setIsSaving(true);
         
@@ -203,10 +200,6 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ isOpen, onClose, st
                         <div>
                             <label htmlFor="rollNumber" className="block text-gray-700 font-medium mb-1">Roll Number</label>
                             <input type="text" id="rollNumber" name="rollNumber" value={formData.rollNumber} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} />
-                        </div>
-                        <div>
-                            <label htmlFor="registrationNumber" className="block text-gray-700 font-medium mb-1">Registration Number</label>
-                            <input type="text" id="registrationNumber" name="registrationNumber" value={formData.registrationNumber} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} />
                         </div>
                         <div>
                             <label htmlFor="contactNumber" className="block text-gray-700 font-medium mb-1">Contact Number</label>

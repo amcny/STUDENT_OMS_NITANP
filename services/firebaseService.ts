@@ -236,7 +236,8 @@ export const recordUserLogin = async (uid: string, email: string, role: string, 
 // --- Student Management ---
 
 export const addStudent = async (studentData: Omit<Student, 'id' | 'faceImage'>, faceImageBase64: string) => {
-  const storageRef = ref(storage, `student_photos/${studentData.registrationNumber}.jpg`);
+  // Use Roll Number for storage filename now
+  const storageRef = ref(storage, `student_photos/${studentData.rollNumber}.jpg`);
   await uploadString(storageRef, faceImageBase64, 'data_url');
   const photoUrl = await getDownloadURL(storageRef);
   
@@ -247,7 +248,8 @@ export const addStudent = async (studentData: Omit<Student, 'id' | 'faceImage'>,
 export const updateStudent = async (studentId: string, studentData: Partial<Student>, newFaceImageBase64?: string | null) => {
     let photoUrl = studentData.faceImage;
     if (newFaceImageBase64) {
-        const storageRef = ref(storage, `student_photos/${studentData.registrationNumber}.jpg`);
+        // Use Roll Number for storage filename now
+        const storageRef = ref(storage, `student_photos/${studentData.rollNumber}.jpg`);
         await uploadString(storageRef, newFaceImageBase64, 'data_url');
         photoUrl = await getDownloadURL(storageRef);
     }
@@ -282,16 +284,16 @@ export const addStudentsBatch = async (studentsData: Omit<Student, 'id'>[]) => {
     await batch.commit();
 };
 
-export const updateStudentPhotoByRegNo = async (regNo: string, faceImageBase64: string, features: number[]) => {
-    const q = query(collection(db, 'students'), where('registrationNumber', '==', regNo));
+export const updateStudentPhotoByRollNo = async (rollNo: string, faceImageBase64: string, features: number[]) => {
+    const q = query(collection(db, 'students'), where('rollNumber', '==', rollNo));
     const querySnapshot = await getDocs(q);
 
     if (querySnapshot.empty) {
-        throw new Error(`Student with Registration Number ${regNo} not found.`);
+        throw new Error(`Student with Roll Number ${rollNo} not found.`);
     }
 
     const studentDoc = querySnapshot.docs[0];
-    const storageRef = ref(storage, `student_photos/${regNo}.jpg`);
+    const storageRef = ref(storage, `student_photos/${rollNo}.jpg`);
     await uploadString(storageRef, faceImageBase64, 'data_url');
     const photoUrl = await getDownloadURL(storageRef);
 

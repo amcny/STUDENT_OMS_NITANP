@@ -1,4 +1,5 @@
 
+
 import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { Student, View } from '../types';
@@ -113,7 +114,6 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
       const missing: string[] = [];
       if (!student.name) missing.push('Name');
       if (!student.rollNumber) missing.push('Roll No');
-      if (!student.registrationNumber) missing.push('Reg No');
       if (!student.branch) missing.push('Branch');
       if (!student.year) missing.push('Year');
       if (!student.gender) missing.push('Gender');
@@ -154,7 +154,7 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
       const yearA = yearOrder[a.year] || 0;
       const yearB = yearOrder[b.year] || 0;
       if (yearA !== yearB) return yearA - yearB;
-      return a.registrationNumber.localeCompare(b.registrationNumber);
+      return a.rollNumber.localeCompare(b.rollNumber);
     });
 
     return filtered;
@@ -209,7 +209,6 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
         const dataToExport = studentsToExport.map(student => ({
             "Name": student.name,
             "Roll Number": student.rollNumber,
-            "Registration Number": student.registrationNumber,
             "Branch": student.branch,
             "Year": student.year,
             "Gender": student.gender,
@@ -365,7 +364,7 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
                 )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Photo</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Registration Number</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Roll Number</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Branch</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Year</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Contact</th>
@@ -429,7 +428,7 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
                             )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.registrationNumber || '-'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.rollNumber || '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.branch || '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.year || '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.contactNumber || '-'}</td>

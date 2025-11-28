@@ -1,4 +1,5 @@
 
+
 import React, { useState, useContext } from 'react';
 import { OutingType, OutingRecord, Student } from '../types';
 import { AppContext } from '../App';

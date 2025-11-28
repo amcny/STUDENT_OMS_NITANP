@@ -1,4 +1,5 @@
 
+
 import React, { useContext, useState, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { OutingRecord, Student, OutingType } from '../types';
@@ -195,7 +196,6 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         const lowerTerm = term.toLowerCase();
         const filteredStudents = students.filter(student => 
             student.rollNumber.toLowerCase().includes(lowerTerm) || 
-            student.registrationNumber.toLowerCase().includes(lowerTerm) ||
             student.name.toLowerCase().includes(lowerTerm)
         ).slice(0, 5);
         setSuggestions(filteredStudents);
@@ -422,7 +422,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
         const student = studentMap.get(log.studentId);
         return {
             "Student Name": log.studentName,
-            "Registration Number": student?.registrationNumber || 'N/A',
+            "Roll Number": log.rollNumber,
             "Branch": student?.branch || 'N/A',
             "Year": log.year,
             "Gender": log.gender,
@@ -654,7 +654,7 @@ const Logbook: React.FC<LogbookProps> = ({ gate }) => {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                 <div className="md:col-span-2" ref={manualSearchRef}>
                     <label htmlFor="manualSearch" className="block text-gray-700 font-medium mb-1">
-                        {selectedStudentForManualEntry ? 'Selected Student' : 'Search Student (Name/Roll/Reg. No)'}
+                        {selectedStudentForManualEntry ? 'Selected Student' : 'Search Student (Name/Roll No)'}
                     </label>
                     
                     {selectedStudentForManualEntry ? (

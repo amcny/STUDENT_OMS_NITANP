@@ -1,4 +1,5 @@
 
+
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { Student } from '../types';
 import Modal from './Modal';
@@ -16,10 +17,10 @@ import {
 // Allow XLSX global
 declare var XLSX: any;
 
-const MANDATORY_HEADERS = ['name', 'registrationNumber'];
+const MANDATORY_HEADERS = ['name', 'rollNumber'];
 
 const INITIAL_FORM_DATA = {
-    name: '', rollNumber: '', registrationNumber: '', contactNumber: '',
+    name: '', rollNumber: '', contactNumber: '',
     branch: '', year: '', gender: '', studentType: '', hostel: '', roomNumber: '',
 };
 
@@ -91,7 +92,7 @@ const RegisterStudent: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    const uppercaseFields = ['name', 'rollNumber', 'registrationNumber', 'roomNumber'];
+    const uppercaseFields = ['name', 'rollNumber', 'roomNumber'];
     const processedValue = uppercaseFields.includes(name) ? value.toUpperCase() : value;
     setFormData(prev => ({ ...prev, [name]: processedValue }));
   };
@@ -145,9 +146,6 @@ const RegisterStudent: React.FC = () => {
     if (students.some(s => s.rollNumber === formData.rollNumber)) {
         setAlert({ message: 'A student with this Roll Number already exists.', type: 'error' }); return;
     }
-    if (students.some(s => s.registrationNumber === formData.registrationNumber)) {
-        setAlert({ message: 'A student with this Registration Number already exists.', type: 'error' }); return;
-    }
 
     setIsSaving(true);
     setAlert({ message: 'Analyzing face and saving to database... Please wait.', type: 'info' });
@@ -179,7 +177,6 @@ const RegisterStudent: React.FC = () => {
     const sampleData = [
         {
             name: "STUDENT NAME",
-            registrationNumber: "9xxxxxx",
             rollNumber: "6xxxxx",
             contactNumber: "9876543210",
             branch: "Computer Science & Engg.",
@@ -196,7 +193,6 @@ const RegisterStudent: React.FC = () => {
     // Add column widths for better readability
     const wscols = [
         {wch: 20}, // name
-        {wch: 20}, // registrationNumber
         {wch: 15}, // rollNumber
         {wch: 15}, // contactNumber
         {wch: 30}, // branch
@@ -247,28 +243,27 @@ const RegisterStudent: React.FC = () => {
         }
 
         const newStudents: Omit<Student, 'id'>[] = [];
-        const existingRegNumbers = new Set(students.map(s => s.registrationNumber));
-        const duplicateRegNumbersInFile = new Set<string>();
+        const existingRollNumbers = new Set(students.map(s => s.rollNumber));
+        const duplicateRollNumbersInFile = new Set<string>();
         let addedCount = 0;
         let skippedCount = 0;
 
         for (const row of json) {
-            if (!row.name || !row.registrationNumber) {
+            if (!row.name || !row.rollNumber) {
                 skippedCount++;
                 continue;
             }
             
-            const regNum = String(row.registrationNumber).toUpperCase();
-            if (existingRegNumbers.has(regNum) || duplicateRegNumbersInFile.has(regNum)) {
+            const rollNum = String(row.rollNumber).toUpperCase();
+            if (existingRollNumbers.has(rollNum) || duplicateRollNumbersInFile.has(rollNum)) {
                 skippedCount++;
                 continue;
             }
-            duplicateRegNumbersInFile.add(regNum);
+            duplicateRollNumbersInFile.add(rollNum);
             
             newStudents.push({
                 name: String(row.name).toUpperCase(),
-                rollNumber: String(row.rollNumber || '').toUpperCase(),
-                registrationNumber: regNum,
+                rollNumber: rollNum,
                 contactNumber: String(row.contactNumber || ''),
                 branch: String(row.branch || ''),
                 year: String(row.year || ''),
@@ -331,7 +326,7 @@ const RegisterStudent: React.FC = () => {
           total: files.length,
       });
 
-      const studentMap = new Map(students.map(s => [s.registrationNumber.toUpperCase(), s.id]));
+      const studentMap = new Map(students.map(s => [s.rollNumber.toUpperCase(), s.id]));
       let successCount = 0;
       const notFoundFiles: string[] = [];
       const errorFiles: string[] = [];
@@ -339,9 +334,9 @@ const RegisterStudent: React.FC = () => {
       // Process files in parallel batches to speed up
       const processBatch = async (batch: File[]) => {
           await Promise.all(batch.map(async (file, index) => {
-              const registrationNumber = file.name.split('.').slice(0, -1).join('.').toUpperCase();
+              const rollNumber = file.name.split('.').slice(0, -1).join('.').toUpperCase();
               
-              if (!studentMap.has(registrationNumber)) {
+              if (!studentMap.has(rollNumber)) {
                   notFoundFiles.push(file.name);
                   return;
               }
@@ -352,10 +347,10 @@ const RegisterStudent: React.FC = () => {
                   const compressedImage = await compressImage(base64Image);
                   
                   const features = await extractFaceFeatures(compressedImage);
-                  await firebaseService.updateStudentPhotoByRegNo(registrationNumber, compressedImage, features);
+                  await firebaseService.updateStudentPhotoByRollNo(rollNumber, compressedImage, features);
                   successCount++;
               } catch (error) {
-                  console.error(`Failed to process image for ${registrationNumber}:`, error);
+                  console.error(`Failed to process image for ${rollNumber}:`, error);
                   errorFiles.push(file.name);
               } finally {
                   setPhotoImportStatus(prev => ({
@@ -416,7 +411,6 @@ const RegisterStudent: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="md:col-span-2"><label className="block text-gray-700 font-medium mb-1">Full Name</label><input type="text" name="name" value={formData.name} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
                         <div><label className="block text-gray-700 font-medium mb-1">Roll Number</label><input type="text" name="rollNumber" value={formData.rollNumber} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
-                        <div><label className="block text-gray-700 font-medium mb-1">Registration Number</label><input type="text" name="registrationNumber" value={formData.registrationNumber} onChange={handleInputChange} required className={`${baseFieldClasses} uppercase`} /></div>
                         <div><label className="block text-gray-700 font-medium mb-1">Contact Number</label><input type="text" name="contactNumber" value={formData.contactNumber} onChange={handleInputChange} required className={baseFieldClasses} /></div>
                         <div className="md:col-span-2"><CustomSelect name="branch" label="Branch" options={BRANCH_OPTIONS} value={formData.branch} onChange={handleSelectChange} required /></div>
                         <CustomSelect name="year" label="Year" options={YEAR_OPTIONS} value={formData.year} onChange={handleSelectChange} required />
@@ -466,7 +460,7 @@ const RegisterStudent: React.FC = () => {
                             <span>Download Template</span>
                         </button>
                     </div>
-                    <p className="text-sm text-gray-600">Upload an .xlsx file with student data. Required columns: <strong className="text-gray-800">name, registrationNumber</strong>. Other columns are optional.</p>
+                    <p className="text-sm text-gray-600">Upload an .xlsx file with student data. Required columns: <strong className="text-gray-800">name, rollNumber</strong>. Other columns are optional.</p>
                     <button type="button" onClick={handleExcelImportClick} disabled={isImportingExcel || isImportingPhotos} className="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition w-full flex items-center justify-center space-x-2 disabled:bg-gray-400"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg><span>{isImportingExcel ? 'Importing...' : 'Import from Excel'}</span></button>
                     <input type="file" ref={excelInputRef} onChange={handleExcelFileSelected} className="hidden" accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
                     {excelImportStatus && <div className="mt-2"><Alert message={excelImportStatus.message} type={excelImportStatus.type} onClose={() => setExcelImportStatus(null)} /></div>}
@@ -477,7 +471,7 @@ const RegisterStudent: React.FC = () => {
                 {/* Photo Import */}
                 <div className="p-4 rounded-lg bg-slate-50 border space-y-3">
                     <h4 className="text-lg font-semibold text-gray-600">2. Import Student Photos</h4>
-                    <p className="text-sm text-gray-600">Upload multiple photos at once. Name each photo file with the student's <strong className="text-gray-800">Registration Number</strong> (e.g., <code className="bg-gray-200 text-red-600 px-1 rounded">6222241.jpg</code>).</p>
+                    <p className="text-sm text-gray-600">Upload multiple photos at once. Name each photo file with the student's <strong className="text-gray-800">Roll Number</strong> (e.g., <code className="bg-gray-200 text-red-600 px-1 rounded">6222241.jpg</code>).</p>
                     <button type="button" onClick={handlePhotoImportClick} disabled={isImportingExcel || isImportingPhotos} className="bg-sky-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-sky-700 transition w-full flex items-center justify-center space-x-2 disabled:bg-gray-400"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg><span>{isImportingPhotos ? 'Importing...' : 'Import Photos'}</span></button>
                     <input type="file" ref={photoInputRef} onChange={handlePhotoFilesSelected} className="hidden" multiple accept="image/png, image/jpeg, image/webp" />
                     {isImportingPhotos && photoImportStatus?.total && (

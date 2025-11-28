@@ -4,8 +4,7 @@ export interface Student {
   id: string;
   name: string;
   branch: string;
-  rollNumber: string;
-  registrationNumber: string;
+  rollNumber: string; // Now the primary identifier
   year: string;
   gender: string;
   studentType: string;
