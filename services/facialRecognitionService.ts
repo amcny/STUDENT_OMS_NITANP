@@ -35,7 +35,15 @@ declare var faceapi: any;
 
 // --- Constants ---
 const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-const SIMILARITY_THRESHOLD = 0.5; // Using Euclidean distance. Lower is a better match. A threshold of 0.5 is reasonably strict.
+
+// CRITICAL SECURITY SETTINGS
+// Euclidean distance: LOWER is a better match.
+// 0.6 is typical default. 0.4 is strict. 
+const STRICT_THRESHOLD = 0.45; 
+
+// If the difference between the Best Match and 2nd Best Match is smaller than this,
+// we reject the result to prevent "confusing" lookalikes.
+const CONFIDENCE_GAP_THRESHOLD = 0.05; 
 
 // --- Model Loading ---
 let modelsLoadedPromise: Promise<boolean> | null = null;
@@ -104,13 +112,14 @@ export const extractFaceFeatures = async (imageBase64: string): Promise<number[]
         image.onload = async () => {
             try {
                 // Use detectSingleFace for registration/verification to ensure only one person is processed.
+                // We use SsdMobilenetv1Options with a minimum confidence to ensure we don't register blurry/bad faces.
                 const detection = await faceapi
-                    .detectSingleFace(image)
+                    .detectSingleFace(image, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
                     .withFaceLandmarks()
                     .withFaceDescriptor();
 
                 if (!detection) {
-                    reject(new Error("No face detected in the image. Please ensure your face is clearly visible."));
+                    reject(new Error("No face detected, or face is too blurry. Please ensure good lighting."));
                     return;
                 }
                 
@@ -152,7 +161,7 @@ export const verifyFace = async (capturedImage: string, storedFeatures: number[]
     }
     const distance = calculateEuclideanDistance(capturedFeatures, storedFeatures);
     console.log('Calculated Euclidean distance for verification:', distance);
-    return distance < SIMILARITY_THRESHOLD;
+    return distance < STRICT_THRESHOLD;
   } catch (error) {
     console.error("Face verification failed:", error);
     // Return false if any error occurs (e.g., no face detected).
@@ -163,6 +172,8 @@ export const verifyFace = async (capturedImage: string, storedFeatures: number[]
 
 /**
  * Scans a captured image and compares it against a list of all students to find the best match.
+ * IMPLEMENTS "CONFIDENCE GAP" LOGIC:
+ * If the best match and second best match are too close, we reject both to prevent false positives.
  */
 export const findBestMatch = async (capturedImage: string, students: import('../types').Student[]): Promise<import('../types').Student | null> => {
     console.log('Searching for the best match using face-api.js...');
@@ -175,27 +186,43 @@ export const findBestMatch = async (capturedImage: string, students: import('../
         }
 
         let bestMatch: import('../types').Student | null = null;
-        let minDistance = Infinity;
+        let bestDistance = Infinity;
+        let secondBestDistance = Infinity;
 
         for (const student of students) {
             if (student.faceFeatures && student.faceFeatures.length > 0) {
                 const distance = calculateEuclideanDistance(capturedFeatures, student.faceFeatures);
-                if (distance < minDistance) {
-                    minDistance = distance;
+                
+                if (distance < bestDistance) {
+                    // Demote current best to second best
+                    secondBestDistance = bestDistance;
+                    bestDistance = distance;
                     bestMatch = student;
+                } else if (distance < secondBestDistance) {
+                    secondBestDistance = distance;
                 }
             }
         }
 
-        console.log(`Best match candidate: ${bestMatch?.name} with distance: ${minDistance}`);
+        console.log(`Best match: ${bestMatch?.name} (Dist: ${bestDistance.toFixed(4)})`);
+        console.log(`2nd Best: (Dist: ${secondBestDistance.toFixed(4)})`);
 
-        if (bestMatch && minDistance < SIMILARITY_THRESHOLD) {
-            return bestMatch;
+        // 1. Hard Threshold Check
+        if (bestDistance > STRICT_THRESHOLD) {
+            console.warn("Match rejected: Distance too high (Low Confidence).");
+            return null;
         }
 
-        return null; // No match found that meets the threshold
+        // 2. Confidence Gap Check (Anti-Spoof/Lookalike)
+        // If the best match is 0.40 and second best is 0.42, that's too close. We can't be sure.
+        const gap = secondBestDistance - bestDistance;
+        if (gap < CONFIDENCE_GAP_THRESHOLD) {
+             console.warn(`Match rejected: Ambiguous result. Gap (${gap.toFixed(4)}) is too small.`);
+             return null;
+        }
+
+        return bestMatch; 
     } catch (error) {
-        // Log the error but return null to indicate failure, which is expected by the calling components.
         console.error("An error occurred while finding the best match:", error);
         return null;
     }

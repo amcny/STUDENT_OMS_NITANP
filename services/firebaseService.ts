@@ -275,13 +275,32 @@ export const deleteStudent = async (student: Student) => {
 };
 
 export const addStudentsBatch = async (studentsData: Omit<Student, 'id'>[]) => {
-    const batch = writeBatch(db);
+    // split into chunks of 450 (safe margin under 500)
+    const chunkSize = 450;
     const studentsCollection = collection(db, 'students');
-    studentsData.forEach(student => {
-        const newDocRef = doc(studentsCollection);
-        batch.set(newDocRef, toFirestore(student));
-    });
-    await batch.commit();
+
+    for (let i = 0; i < studentsData.length; i += chunkSize) {
+        const chunk = studentsData.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach(student => {
+            const newDocRef = doc(studentsCollection);
+            batch.set(newDocRef, toFirestore(student));
+        });
+        await batch.commit();
+    }
+};
+
+export const updateStudentsBatch = async (updates: { id: string; data: Partial<Student> }[]) => {
+    const chunkSize = 450;
+    for (let i = 0; i < updates.length; i += chunkSize) {
+        const chunk = updates.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach(({ id, data }) => {
+            const docRef = doc(db, 'students', id);
+            batch.update(docRef, toFirestore(data));
+        });
+        await batch.commit();
+    }
 };
 
 export const updateStudentPhotoByRollNo = async (rollNo: string, faceImageBase64: string, features: number[]) => {
