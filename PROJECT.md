@@ -2,199 +2,176 @@
 
 **Institute:** National Institute of Technology, Andhra Pradesh  
 **Platform:** Web Application (React 19 + TypeScript + Firebase)  
-**Version:** 3.5 (Cloud-Native, Cost-Optimized & Production Ready)  
-**Architecture:** Serverless Single Page Application (SPA)
+**Version:** 4.0 (Enterprise Grade & Security Hardened)  
+**Architecture:** Serverless SPA with Client-Side Biometrics & Batch Processing
 
 ---
 
 ## 1. Executive Summary
 
-The **Student Outing Management System (SOMS)** is a mission-critical security platform designed to digitize, secure, and automate the movement of students and visitors at campus gates.
+The **Student Outing Management System (SOMS)** is a comprehensive digital security platform for campus gate management. It automates student checkout/check-in using **AI-driven Facial Recognition**, manages visitor gate passes, and provides real-time analytics.
 
-It replaces manual logbooks with **Biometric Facial Recognition**, ensures **Real-Time Synchronization** between multiple gates (Front/Back) using Cloud Firestore, and implements an intelligent **"Smart Sync"** architecture to minimize cloud costs while maintaining access to historical data.
-
----
-
-## 2. Technical Stack & Architecture
-
-### Frontend Layer
-*   **Framework:** React 19 (Built with Vite for high performance).
-*   **Language:** TypeScript 5.0+ (Strict typing for robustness).
-*   **Styling:** Tailwind CSS (Utility-first design).
-*   **State Management:** React Context API + Real-time Firebase Listeners.
-
-### Backend Layer (Serverless)
-*   **Authentication:** Firebase Auth (Email/Password) with Custom Claims for Role-Based Access Control (RBAC).
-*   **Database:** Google Cloud Firestore (NoSQL, Real-time).
-*   **Storage:** Firebase Storage (Object storage for high-res images).
-
-### Specialized Modules
-*   **AI/Biometrics:** `face-api.js` (TensorFlow.js) running entirely in the browser to perform face detection and feature extraction without server-side ML costs.
-*   **Reporting:** `jspdf` + `html2canvas` for vector-quality PDF generation.
-*   **Data Processing:** `xlsx` (SheetJS) for bulk Excel operations.
+**Key Version 4.0 Upgrades:**
+*   **Zero-Trust Biometrics:** Implementation of "Confidence Gap" logic and High-Res feature extraction to eliminate false positives.
+*   **Programmatic Reporting:** Replaced screenshot-based reporting with pixel-perfect, vector-based PDF generation.
+*   **Bulk Data Safety:** Introduction of "Smart Batching" (Chunking) to handle large Excel/Photo imports without hitting database limits, featuring a "Skip vs. Overwrite" workflow.
+*   **Thermal Printing:** Native support for 80mm thermal receipt printers for visitor passes.
 
 ---
 
-## 3. Database Strategy: "Smart Sync" & Cost Optimization
+## 2. System Architecture
 
-A critical challenge in cloud apps is billing based on "Reads". Loading 50,000 historical logs on startup would cost money every time a guard refreshes the page. SOMS solves this with a **Hybrid Data Fetching Strategy**.
+### 2.1. Hybrid Data Strategy ("Smart Sync")
+To optimize Cloud Firestore costs while ensuring performance, the app uses a hybrid fetching strategy:
+1.  **Students (Full Load):** All ~2500 student records (features & metadata) are loaded on startup into memory. This enables **instant** facial recognition without per-scan network latency.
+2.  **Live Outing Logs (Partial Sync):** The app listens *only* to:
+    *   Logs created in the **last 7 days**.
+    *   Any log with status **"Active/Out"**, regardless of age.
+3.  **Archived Logs (On-Demand):** Historical data (>7 days and completed) is kept cold in the database and only fetched via the **Archive Search** module.
 
-### 3.1. The "Live" vs. "Archive" Architecture
+### 2.2. The Biometric Pipeline (Zero-Trust)
+Facial recognition runs entirely in the client browser using `face-api.js` (TensorFlow.js), preserving privacy and reducing server costs.
 
-| Data Type | Fetch Strategy | Billing Impact | Behavior |
-| :--- | :--- | :--- | :--- |
-| **Students** | **Full Load** | Moderate | Loads all active students (~2500) on startup to enable instant facial recognition. |
-| **Outing Logs (Live)** | **Active + Recent** | **Low** | Listens only to logs from the **last 7 days** AND any **currently active** outings (regardless of age). |
-| **Outing Logs (History)** | **On-Demand** | **Zero (Idle)** | Historical data is *never* loaded unless an Admin explicitly uses **Archive Search**. |
-| **Visitor Logs** | **Recent Only** | **Low** | Listens to last 7 days. History available via Archive Search. |
-
-### 3.2. Read/Write Cost Analysis
-*   **Initial App Load:** ~2,700 Reads (2500 Students + ~200 Recent Logs).
-*   **Steady State:** 0 Reads (Listen mode).
-*   **Student Check-Out:** 1 Write (Create Doc) + 1 Read (Listener Update).
-*   **Archive Search:** 1 Read per record found (e.g., searching "Last Month" costs ~2,000 reads one-time).
-*   **Exporting Data:**
-    *   *Current View:* 0 Reads (Uses memory).
-    *   *Historical Export:* Costs 1 read per record fetched from DB.
-
----
-
-## 4. Module Breakdown & Working Mechanism
-
-### 4.1. Authentication & Security
-*   **Gate Login:** Users log in as specific gates (e.g., `frontgate@...`).
-*   **RBAC (Roles):**
-    *   **Admin:** Full access (Delete, Edit Remarks, Bulk Operations).
-    *   **Security:** Operational access (Check-In/Out, Visitor Pass). **No Delete permissions.**
-*   **Security PIN:** A hardcoded PIN (`200405`) is required for destructive actions (Delete/Edit) to prevent accidental data loss.
-
-### 4.2. Dashboard
-*   **Real-time Metrics:** Displays "Currently Out", "Overdue", and "On Campus" counts derived instantly from the live `outingLogs` context.
-*   **Demographics:** Interactive charts showing outings by **Year** and **Hostel**.
-*   **PDF Report:** Generates a printable report on NIT Andhra Pradesh letterhead containing executive summaries, hostel occupancy tables, and detailed overdue lists.
-
-### 4.3. Student Registration (Biometric Enrollment)
-*   **Single Registration:** Captures student details and photo (Webcam/Upload).
-*   **Image Compression Engine:**
-    *   *Problem:* 5MB phone photos clog bandwidth.
-    *   *Solution:* Client-side canvas compression resizes images to **600x600px JPEG (80% quality)**, reducing size to ~50KB before upload.
-*   **Bulk Import:**
-    *   **Excel:** Parses `.xlsx` for student metadata.
-    *   **Photo Import:** Admins upload a folder of images named by Reg Number (e.g., `621234.jpg`). The system automatically matches them to students, extracts facial features, and uploads them to Firebase.
-
-### 4.4. The Smart Kiosk (Core Operations)
-This module handles student movement.
-
-*   **Warm-Up Sequence:** On load, runs a "dummy" AI inference to compile WebGL shaders, preventing the UI from freezing during the first actual student scan.
-*   **Facial Recognition:**
-    1.  Captures frame.
-    2.  Detects face & extracts 128-point vector.
-    3.  Calculates Euclidean distance against all 2500 local student vectors.
-    4.  Match found if distance < 0.5.
-*   **Anti-Double Check-Out Logic (The "Blind Spot" Fix):**
-    *   *Scenario:* Student checked out 10 days ago. The "Live" listener (7-day window) doesn't see it.
-    *   *Fix:* When a student tries to check out, the system first checks local data. If clear, it performs a **targeted server-side query** (`findAnyActiveOutingForStudent`) to ensure no hidden active outings exist in the database history.
-
-### 4.5. Outing Logbook
-*   **Live View:** Default state. Shows recent activity. Fast & cheap.
-*   **Archive Search:** Admin selects a date range. System performs a `getDocs` query to fetch historical data for auditing.
-*   **Actions:**
-    *   **Manual Entry:** Allows guards to manually check in/out students if biometrics fail.
-    *   **Resolve Overdue:** Adds a remark to close an overdue flag.
-    *   **Bulk Delete:** Admin can purge old logs (e.g., > 1 year) to keep the DB clean. Requires Export + PIN.
-
-### 4.6. Visitor Management System
-*   **Pass Generation:** Records visitor details, photo not required.
-*   **Thermal Printing (New):**
-    *   Generates an **80mm receipt** format.
-    *   Includes Institute Logo, Pass No, Visitor Details, and Signature space.
-    *   Optimized CSS (`@media print`) ensures margins are zeroed for thermal printers.
-*   **Departure:** "Mark Out" button updates the `outTime` and `outGate`.
+**The "Zero-Trust" Workflow:**
+1.  **Capture:** Webcam captures a frame.
+2.  **Detection:** SSD MobileNet V1 detects the face.
+3.  **Extraction:** ResNet-34 computes a 128-dimensional Euclidean vector.
+4.  **Verification (The 3-Step Check):**
+    *   *Step A:* Find the mathematical "Best Match" in the student database.
+    *   *Step B:* **Strict Threshold Check:** Distance must be `< 0.45` (Lower is better).
+    *   *Step C:* **Confidence Gap Check:** The difference between the Best Match and the 2nd Best Match must be `> 0.05`. If two students look too similar, the system rejects *both* to prevent identity spoofing.
 
 ---
 
-## 5. Database Schema (Firestore)
+## 3. Detailed Module Breakdown
 
-### Collection: `students`
-```json
-{
-  "id": "auto-generated",
-  "name": "STUDENT NAME",
-  "rollNumber": "4212...",
-  "registrationNumber": "9212...",
-  "branch": "CSE",
-  "year": "IV",
-  "gender": "Male",
-  "studentType": "Hosteller",
-  "hostel": "Godavari",
-  "roomNumber": "101",
-  "contactNumber": "9876543210",
-  "faceImage": "https://firebasestorage.../9212....jpg",
-  "faceFeatures": [0.123, -0.456, ...], // 128 float array
-  "updatedAt": "Timestamp"
-}
-```
+### 3.1. Authentication & Roles
+*   **File:** `components/Login.tsx`
+*   **Mechanism:** Firebase Auth (Email/Password).
+*   **Gate Logic:** User email determines the "Gate Name" (e.g., `frontgate@...` -> "Front Gate").
+*   **Roles:**
+    *   `Admin`: Full CRUD access, Bulk Delete, Settings.
+    *   `Security`: Operational access (Kiosk, Visitor). No deletion capabilities.
 
-### Collection: `outingLogs`
-*Denormalized for performance (contains student details to avoid joins).*
-```json
-{
-  "id": "auto-generated",
-  "studentId": "ref-to-students",
-  "studentName": "STUDENT NAME",
-  "outingType": "Local" | "Non-Local",
-  "checkOutTime": "Timestamp",
-  "checkOutGate": "Front Gate",
-  "checkInTime": "Timestamp" | null,
-  "checkInGate": "Back Gate" | null,
-  "remarks": "Manual entry...",
-  "overdueResolved": boolean
-}
-```
+### 3.2. Dashboard & Reporting
+*   **File:** `components/Dashboard.tsx`
+*   **Stats:** Real-time counters for "Currently Out", "Overdue", "Local/Non-Local Today".
+*   **Charts:** Doughnut charts for Outing Demographics (Year/Hostel).
+*   **PDF Report Engine (`services/reportGeneratorService.ts`):**
+    *   **Old Method:** `html2canvas` (Screenshot) - *Deprecated due to layout drift.*
+    *   **New Method:** `jspdf` + `jspdf-autotable`.
+    *   **Logic:** The report is drawn programmatically (lines, text, tables) coordinate-by-coordinate.
+    *   **Features:**
+        *   Auto-calculation of Hostel Occupancy.
+        *   Precise "Overdue Analysis" table.
+        *   Uses standard **Helvetica** font for professional compatibility.
+        *   Two-column layout for Activity Stats.
 
-### Collection: `visitorLogs`
-```json
-{
-  "id": "auto-generated",
-  "passNumber": "V-20231025-001",
-  "name": "VISITOR NAME",
-  "relation": "Parent",
-  "whomToMeet": "STUDENT NAME",
-  "inTime": "Timestamp",
-  "gateName": "Front Gate",
-  "outTime": "Timestamp" | null,
-  "outGateName": "Front Gate" | null
-}
-```
+### 3.3. Student Registration & Bulk Operations
+*   **File:** `components/RegisterStudent.tsx`
+*   **Single Registration:** Captures metadata and a photo.
+*   **Bulk Excel Import:**
+    *   **Logic:** Reads `.xlsx` files using SheetJS.
+    *   **Duplicate Handling:** Separates entries into "New" and "Existing" (based on Roll No).
+    *   **Overwrite Feature:** Users can click "Overwrite Skipped" to force-update existing students with Excel data.
+    *   **Chunking:** Uses `firebaseService.ts` -> `addStudentsBatch` to split data into chunks of 450 records, bypassing Firestore's 500-write limit.
+*   **Bulk Photo Import:**
+    *   **Logic:** Matches filenames (e.g., `621234.jpg`) to Student Roll Numbers.
+    *   **High-Res Analysis:** Extracts facial features from the **RAW** image file *before* compression to ensure maximum accuracy.
+    *   **Compression:** Compresses image to 600x600 JPEG (80%) for storage *after* analysis.
+    *   **Workflow:** Reports "Success", "Skipped (Already exists)", and "Analysis Failed (Blurry)". Allows "Overwrite & Re-import" for skipped files.
 
----
+### 3.4. The Outing Kiosk
+*   **File:** `components/OutingKiosk.tsx`
+*   **Purpose:** The primary interface for students.
+*   **Blind Spot Protection:** Before allowing a Check-Out, the system performs a deep DB query (`findAnyActiveOutingForStudent`) to ensure the student isn't already out (even if the log is old and not in the local cache).
+*   **Retry Logic:** Allows 3 scan attempts before locking and suggesting manual entry.
 
-## 6. Operational Guidelines
+### 3.5. The Logbook
+*   **File:** `components/Logbook.tsx`
+*   **Views:**
+    *   **Live:** Last 7 days + Active.
+    *   **Archive:** Date-range search (Server-side query).
+*   **Manual Entry:** Searchable dropdown to manually check in/out students who fail biometrics.
+*   **Bulk Delete (Admin Only):**
+    *   **Requirement:** Admin must first **Export** the data to Excel.
+    *   **Security:** Requires entering the PIN `200405` to confirm deletion.
+    *   **Scope:** Options for "Older than 3 months", "6 months", "1 year".
 
-### A. Power Failure / System Restart
-*   **Behavior:** When the system restarts, it performs a fresh fetch of Students and Recent Logs.
-*   **Cost:** ~2700 Reads.
-*   **Data Integrity:** No data is lost. Active outings from before the power cut are retrieved automatically.
-
-### B. Handling "Blind Spot" Check-Ins
-If a student returns after 15 days (outside the 7-day live window):
-1.  They scan at the Kiosk.
-2.  Kiosk checks local data -> Not found.
-3.  Kiosk queries DB for `studentId + status=OUT`.
-4.  **Found:** System updates the old record.
-5.  **Result:** The check-in is successful, and the log reappears in the list.
-
-### C. Bulk Data Import
-1.  **Excel:** Use the downloadable template. Upload `.xlsx`.
-2.  **Photos:** Ensure file names match Registration Numbers exactly (e.g., `123456.jpg`). Select all files and upload in the "Import Photos" section. The system handles matching and compression.
-
-### D. Billing Management
-*   **Refresh Rate:** Avoid frequent page refreshes during development to save reads.
-*   **Exporting:** Only export "All Logs" when strictly necessary for auditing. Prefer "Current View" or "Last 3 Months".
+### 3.6. Visitor Management
+*   **File:** `components/VisitorGatePass.tsx`
+*   **Pass Generation:** Auto-generates Pass IDs (e.g., `V-20231124-001`).
+*   **Printing:**
+    *   **Standard:** A5/A4 layout.
+    *   **Thermal:** Optimized 80mm CSS layout with zero margins for POS printers.
+*   **Tracking:** "Mark Out" button stamps timestamp and Out Gate.
 
 ---
 
-## 7. Future Roadmap
-*   **SMS Integration:** Trigger SMS to parents on Non-Local checkout.
-*   **Biometric Visitor Pass:** Capture visitor photos for repeated entry verification.
-*   **Offline Mode:** Implement partial PWA offline support using IndexedDB (Firestore Persistence).
+## 4. Key Functions & Services
+
+### `services/firebaseService.ts`
+*   **`addStudentsBatch(students)`**: Splits an array of 2000 students into batches of 450 and commits them sequentially to prevent crashes.
+*   **`updateStudentsBatch(updates)`**: Handles bulk overwrites safely.
+*   **`onOutingLogsUpdate(callback)`**: Merges "Recent" (7 days) and "Active" (Status=Out) queries into a single unified stream.
+*   **`getArchivedOutingLogs(start, end)`**: Performs compound queries for historical data.
+
+### `services/facialRecognitionService.ts`
+*   **`loadModels()`**: Asynchronously loads SSD MobileNet and ResNet weights.
+*   **`extractFaceFeatures(base64)`**: Returns the 128-float array.
+*   **`findBestMatch(image, students)`**:
+    *   Iterates through all ~2500 students.
+    *   Calculates Euclidean Distance.
+    *   Applies **Confidence Gap** logic: `(2ndBest - Best) < 0.05 ? Reject : Accept`.
+
+### `services/reportGeneratorService.ts`
+*   **`generatePdfReport(data)`**:
+    *   Fetches Logo (Base64).
+    *   Draws Header (NIT Andhra Pradesh).
+    *   Draws Stat Cards (Rectangles + Text).
+    *   Generates Tables (AutoTable) with conditional formatting (Red for Overdue).
+    *   Saves as `OUTING_REPORT_YYYY-MM-DD.pdf`.
+
+---
+
+## 5. File Manifest
+
+| File Path | Description |
+| :--- | :--- |
+| `App.tsx` | Main entry point. Handles Routing, Auth state, Global Context, and Kiosk Mode. |
+| `types.ts` | TypeScript interfaces for Student, OutingRecord, VisitorPassRecord, User. |
+| `constants.ts` | Static data: Branches, Hostels, Dropdown options. |
+| `firebase.ts` | Firebase App initialization and exports (Auth, DB, Storage). |
+| `services/firebaseService.ts` | CRUD operations, Real-time listeners, Batching logic. |
+| `services/facialRecognitionService.ts` | AI model loading, Feature extraction, Math logic for matching. |
+| `services/reportGeneratorService.ts` | PDF generation logic. |
+| `components/Login.tsx` | Gate login screen. |
+| `components/Header.tsx` | Navigation bar. |
+| `components/Footer.tsx` | Copyright footer. |
+| `components/Dashboard.tsx` | Analytics, Charts, Report Trigger. |
+| `components/RegisterStudent.tsx` | Single/Bulk Registration forms. |
+| `components/OutingKiosk.tsx` | Student-facing scanner interface. |
+| `components/Logbook.tsx` | Master record view, Archive search, Manual Entry. |
+| `components/AllStudents.tsx` | Student database view, Edit/Delete, Bulk Selection. |
+| `components/VisitorGatePass.tsx` | Visitor entry forms and logbook. |
+| `components/GatePassPreviewModal.tsx` | Printable preview for visitor passes. |
+| `components/EditStudentModal.tsx` | Form to edit student details/photo. |
+| `components/StudentProfileModal.tsx` | Read-only student details view. |
+| `components/StudentListModal.tsx` | Generic list view for dashboard clicks. |
+| `components/CameraCapture.tsx` | Webcam handling component. |
+| `components/CustomSelect.tsx` | Reusable styled dropdown. |
+| `components/Modal.tsx` | Reusable modal wrapper. |
+| `components/Alert.tsx` | Reusable notification banner. |
+| `components/Spinner.tsx` | Loading indicator. |
+| `components/ConfirmationModal.tsx` | Generic "Are you sure?" dialog. |
+| `components/RemarksModal.tsx` | Dialog to add/edit remarks. |
+| `components/ViewRemarksModal.tsx` | Read-only remarks view. |
+| `components/charts/*.tsx` | Wrapper components for Chart.js (Bar, Line, Doughnut). |
+
+---
+
+## 6. Security Protocols
+
+1.  **PIN Protection:** The PIN `200405` is hardcoded into `Logbook.tsx`, `AllStudents.tsx`, and `VisitorGatePass.tsx`. It acts as a client-side check before calling destructive Firebase functions.
+2.  **Role-Based Rendering:** Components check `role === 'admin'` before rendering Delete buttons or Bulk Import tools.
+3.  **Data Isolation:** "Security" role users cannot see or access the "Bulk Delete" features even if they knew the URL (protected by component logic).
