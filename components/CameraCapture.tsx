@@ -11,6 +11,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose }) => 
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(1);
   const [isFlashing, setIsFlashing] = useState(false);
+  const [isCameraReady, setIsCameraReady] = useState(false);
 
   const stopCamera = useCallback(() => {
     if (videoRef.current && videoRef.current.srcObject) {
@@ -49,6 +50,10 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose }) => 
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          // Only set ready when data is loaded to avoid black screen countdown
+          videoRef.current.onloadeddata = () => {
+             setIsCameraReady(true);
+          };
         }
       } catch (err) {
         console.error("Error accessing camera:", err);
@@ -66,13 +71,16 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose }) => 
   useEffect(() => {
     if (error) return;
 
+    // Wait until camera is actually ready before starting countdown
+    if (!isCameraReady) return;
+
     if (countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
     } else if (countdown === 0) {
       handleCapture();
     }
-  }, [countdown, handleCapture, error]);
+  }, [countdown, handleCapture, error, isCameraReady]);
 
   return (
     <div className="flex flex-col items-center">
@@ -90,10 +98,18 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose }) => 
           ></div>
         </div>
 
-        {countdown > 0 && !error && (
+        {/* Only show countdown if camera is ready */}
+        {isCameraReady && countdown > 0 && !error && (
           <div className="absolute inset-0 flex justify-center items-center">
             <span className="text-white text-9xl font-bold" style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>{countdown}</span>
           </div>
+        )}
+        
+        {/* Loading state if camera isn't ready yet */}
+        {!isCameraReady && !error && (
+           <div className="absolute inset-0 flex justify-center items-center bg-black bg-opacity-50">
+             <div className="border-4 border-gray-200 border-t-white rounded-full w-12 h-12 animate-spin"></div>
+           </div>
         )}
       </div>
     </div>

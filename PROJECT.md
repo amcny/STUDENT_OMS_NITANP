@@ -1,177 +1,234 @@
-# Student Outing Management System (SOMS) - Master Documentation
+# PROJECT REPORT: Smart Student Outing Management System (SOMS)
+**A Thesis on Biometric Authentication and Cloud-Based Logistics**
 
 **Institute:** National Institute of Technology, Andhra Pradesh  
-**Platform:** Web Application (React 19 + TypeScript + Firebase)  
-**Version:** 4.0 (Enterprise Grade & Security Hardened)  
-**Architecture:** Serverless SPA with Client-Side Biometrics & Batch Processing
+**Department:** Electronics and Communication Engineering  
+**Version:** 4.0 (Enterprise Release)
 
 ---
 
-## 1. Executive Summary
+## ABSTRACT
 
-The **Student Outing Management System (SOMS)** is a comprehensive digital security platform for campus gate management. It automates student checkout/check-in using **AI-driven Facial Recognition**, manages visitor gate passes, and provides real-time analytics.
-
-**Key Version 4.0 Upgrades:**
-*   **Zero-Trust Biometrics:** Implementation of "Confidence Gap" logic and High-Res feature extraction to eliminate false positives.
-*   **Programmatic Reporting:** Replaced screenshot-based reporting with pixel-perfect, vector-based PDF generation.
-*   **Bulk Data Safety:** Introduction of "Smart Batching" (Chunking) to handle large Excel/Photo imports without hitting database limits, featuring a "Skip vs. Overwrite" workflow.
-*   **Thermal Printing:** Native support for 80mm thermal receipt printers for visitor passes.
+The **Smart Student Outing Management System (SOMS)** is a sophisticated digital platform designed to automate, secure, and log student movements within the NIT Andhra Pradesh campus. Integrating principles of **Digital Image Processing (DIP)**, **Computer Vision**, and **Cloud Computing**, the system replaces manual logbooks with a touchless, facial-recognition-based kiosk. The project leverages Client-Side Edge AI to extract 128-dimensional facial feature vectors, ensuring low-latency authentication. The backend is powered by a serverless architecture (Firebase) ensuring real-time synchronization across multiple physical gates. This report details the system architecture, signal processing algorithms, database schema, and operational logistics.
 
 ---
 
-## 2. System Architecture
+## CHAPTER 1: INTRODUCTION
 
-### 2.1. Hybrid Data Strategy ("Smart Sync")
-To optimize Cloud Firestore costs while ensuring performance, the app uses a hybrid fetching strategy:
-1.  **Students (Full Load):** All ~2500 student records (features & metadata) are loaded on startup into memory. This enables **instant** facial recognition without per-scan network latency.
-2.  **Live Outing Logs (Partial Sync):** The app listens *only* to:
-    *   Logs created in the **last 7 days**.
-    *   Any log with status **"Active/Out"**, regardless of age.
-3.  **Archived Logs (On-Demand):** Historical data (>7 days and completed) is kept cold in the database and only fetched via the **Archive Search** module.
+### 1.1 Problem Statement
+Traditional gate management relies on physical logbooks and manual ID verification. This process is:
+1.  **Time-Consuming:** Causing queues during peak hours.
+2.  **Insecure:** Prone to "buddy punching" (proxy attendance) and human verification errors.
+3.  **Data Siloed:** Information at the Front Gate is not instantly available at the Back Gate.
+4.  **Difficult to Audit:** Manual data cannot be easily analyzed for overdue students or traffic patterns.
 
-### 2.2. The Biometric Pipeline (Zero-Trust)
-Facial recognition runs entirely in the client browser using `face-api.js` (TensorFlow.js), preserving privacy and reducing server costs.
+### 1.2 Project Objective
+To design and implement a robust, contactless Outing Management System that utilizes **Biometric Verification** to authenticate students in under 2 seconds, enforces campus rules (overdue logic), and provides real-time analytics to the administration.
 
-**The "Zero-Trust" Workflow:**
-1.  **Capture:** Webcam captures a frame.
-2.  **Detection:** SSD MobileNet V1 detects the face.
-3.  **Extraction:** ResNet-34 computes a 128-dimensional Euclidean vector.
-4.  **Verification (The 3-Step Check):**
-    *   *Step A:* Find the mathematical "Best Match" in the student database.
-    *   *Step B:* **Strict Threshold Check:** Distance must be `< 0.45` (Lower is better).
-    *   *Step C:* **Confidence Gap Check:** The difference between the Best Match and the 2nd Best Match must be `> 0.05`. If two students look too similar, the system rejects *both* to prevent identity spoofing.
+### 1.3 Relevance to Electronics & Communication Engineering (ECE)
+While the interface is software-based, the core functionality relies on ECE domains:
+*   **Digital Signal Processing (DSP):** The conversion of raw pixel data from a CMOS sensor (Camera) into a normalized mathematical vector (Face Embedding).
+*   **Pattern Recognition:** The use of Residual Neural Networks (ResNet-34) to identify facial landmarks.
+*   **Communication Systems:** Asynchronous transmission of data packets (JSON) over HTTPS/TCP/IP between the Client (Edge) and the Cloud Server.
+*   **IoT Potential:** The system is designed to interface with solenoid locks and turnstiles in future iterations.
 
 ---
 
-## 3. Detailed Module Breakdown
+## CHAPTER 2: SYSTEM ARCHITECTURE
 
-### 3.1. Authentication & Roles
-*   **File:** `components/Login.tsx`
-*   **Mechanism:** Firebase Auth (Email/Password).
-*   **Gate Logic:** User email determines the "Gate Name" (e.g., `frontgate@...` -> "Front Gate").
-*   **Roles:**
-    *   `Admin`: Full CRUD access, Bulk Delete, Settings.
-    *   `Security`: Operational access (Kiosk, Visitor). No deletion capabilities.
+The system follows a **Serverless, Event-Driven Architecture** with heavy reliance on **Edge Computing**.
 
-### 3.2. Dashboard & Reporting
-*   **File:** `components/Dashboard.tsx`
-*   **Stats:** Real-time counters for "Currently Out", "Overdue", "Local/Non-Local Today".
-*   **Charts:** Doughnut charts for Outing Demographics (Year/Hostel).
-*   **PDF Report Engine (`services/reportGeneratorService.ts`):**
-    *   **Old Method:** `html2canvas` (Screenshot) - *Deprecated due to layout drift.*
-    *   **New Method:** `jspdf` + `jspdf-autotable`.
-    *   **Logic:** The report is drawn programmatically (lines, text, tables) coordinate-by-coordinate.
-    *   **Features:**
-        *   Auto-calculation of Hostel Occupancy.
-        *   Precise "Overdue Analysis" table.
-        *   Uses standard **Helvetica** font for professional compatibility.
-        *   Two-column layout for Activity Stats.
+### 2.1 The Tech Stack
+*   **Frontend (The Edge):** React 19, TypeScript, Tailwind CSS.
+*   **Biometric Engine:** `face-api.js` (TensorFlow.js running on WebGL/CPU).
+*   **Backend (The Cloud):** Google Firebase (Firestore NoSQL DB, Authentication, Cloud Functions).
+*   **Storage:** Firebase Cloud Storage (Blob storage for images).
 
-### 3.3. Student Registration & Bulk Operations
-*   **File:** `components/RegisterStudent.tsx`
-*   **Single Registration:** Captures metadata and a photo.
-*   **Bulk Excel Import:**
-    *   **Logic:** Reads `.xlsx` files using SheetJS.
-    *   **Duplicate Handling:** Separates entries into "New" and "Existing" (based on Roll No).
-    *   **Overwrite Feature:** Users can click "Overwrite Skipped" to force-update existing students with Excel data.
-    *   **Chunking:** Uses `firebaseService.ts` -> `addStudentsBatch` to split data into chunks of 450 records, bypassing Firestore's 500-write limit.
+### 2.2 Data Flow Pipeline
+1.  **Acquisition:** The CMOS camera captures a video stream at 30fps.
+2.  **Sampling:** A specific frame is captured upon user trigger.
+3.  **Processing:** The frame is passed to the Neural Network engine within the browser (Client-side).
+4.  **Extraction:** A 128-float vector is generated.
+5.  **Transmission:** If a match is found, metadata is sent to the Firestore Database via REST/Socket connection.
+6.  **Synchronization:** Listeners (`onSnapshot`) at other gates receive the update instantly.
+
+---
+
+## CHAPTER 3: BIOMETRIC SIGNAL PROCESSING & ALGORITHMS
+
+This section details the core algorithm used for facial recognition, located in `services/facialRecognitionService.ts`.
+
+### 3.1 Face Detection (SSD MobileNet V1)
+Before recognition, the system must locate the face. We utilize a **Single Shot Multibox Detector (SSD)** with a MobileNet V1 backbone.
+*   **Function:** `faceapi.detectSingleFace(image)`
+*   **Operation:** Scans the image grid to find bounding boxes with a high probability of containing a face.
+*   **Optimization:** Configured to ignore faces with a confidence score below 0.5 to prevent processing noise.
+
+### 3.2 Feature Extraction (ResNet-34)
+Once the face is aligned using 68 facial landmarks, it is passed through a ResNet-34 Deep Neural Network.
+*   **Input:** 150x150 px aligned RGB image.
+*   **Output:** A 128-dimensional array of floating-point numbers (The "Face Descriptor").
+*   **Significance:** This vector represents the face in a latent space where the geometric distance between vectors corresponds to visual similarity.
+
+### 3.3 Matching Logic (Euclidean Distance)
+To verify identity, we calculate the Euclidean Distance between the *Captured Vector (A)* and *Stored Vectors (B)*.
+
+**Formula:**
+$$ d(A, B) = \sqrt{\sum_{i=1}^{128} (A_i - B_i)^2} $$
+
+### 3.4 Zero-Trust Verification Protocol
+To ensure security and eliminate false positives, the system implements a strict decision matrix in `findBestMatch()`:
+
+1.  **Strict Thresholding:**
+    The calculated distance must be **< 0.45**. Standard systems use 0.6. We use 0.45 to ensure extremely high confidence.
+
+2.  **The Confidence Gap (Anti-Spoofing/Lookalike Logic):**
+    The system calculates the distance for the *Best Match* ($d_1$) and the *Second Best Match* ($d_2$).
+    $$ \text{Gap} = d_2 - d_1 $$
+    **Condition:** If $\text{Gap} < 0.05$, the match is **REJECTED**.
+    *Reasoning:* If the AI thinks the user looks like Person A (0.40) and Person B (0.42), the margin for error is too high. This prevents the system from confusing siblings or lookalikes.
+
+---
+
+## CHAPTER 4: BACKEND DATABASE SCHEMA
+
+The backend uses **Google Cloud Firestore**, a NoSQL document database.
+
+### 4.1 Collection: `students`
+Stores the master data.
+*   `rollNumber` (Primary Key, String): Unique identifier (e.g., "622241").
+*   `faceFeatures` (Array<float>): The 128-D biometric signature.
+*   `faceImage` (String): URL to the high-res image in Cloud Storage.
+*   `name`, `branch`, `year`, `gender`, `contactNumber`: Metadata.
+*   `hostel`, `roomNumber`: Residence details (nullable for Day Scholars).
+
+### 4.2 Collection: `outingLogs`
+A transactional log of every movement.
+*   `studentId` (Foreign Key): Link to `students` collection.
+*   `checkOutTime` (ISO Timestamp): When the student left.
+*   `checkInTime` (ISO Timestamp | Null): When the student returned.
+*   `status`: Derived field ("IN" or "OUT").
+*   `outingType`: "Local" or "Non-Local".
+*   `isOverdue` (Boolean): Flag for rule violations.
+
+### 4.3 Collection: `visitorLogs`
+Stores external visitor data.
+*   `passNumber`: Auto-generated ID (e.g., "V-20231121-001").
+*   `inTime`, `outTime`: Entry/Exit timestamps.
+*   `vehicleNumber`, `purpose`, `whomToMeet`: Security details.
+
+---
+
+## CHAPTER 5: FUNCTIONAL DESCRIPTION (USER MANUAL)
+
+This chapter breaks down every module and button in the application.
+
+### 5.1 Dashboard (`components/Dashboard.tsx`)
+*   **Overview Cards:** 
+    *   *Total Students:* Live count from database.
+    *   *Currently Out:* Calculates count of logs where `checkInTime == null`.
+    *   *Total Overdue:* Counts active logs exceeding time limits (9 PM Local / 72hr Non-Local).
+*   **Demographic Charts:** Doughnut charts visualizing which Year or Hostel has the most students currently outside.
+*   **Generate Report Button:** Triggers `generatePdfReport`. This uses vector graphics to draw a pixel-perfect, A4-sized PDF summary including tables and overdue lists.
+
+### 5.2 Registration Module (`components/RegisterStudent.tsx`)
+*   **Single Registration:** Form to enter details + Webcam Capture button.
+*   **Bulk Import (Excel):**
+    *   *Mechanism:* Parses `.xlsx` files using `SheetJS`.
+    *   *Conflict Resolution:* Checks Roll Numbers against DB. Shows a detailed report of "New" vs. "Skipped" records.
+    *   *Overwrite Button:* Allows admin to force-update details for skipped students.
 *   **Bulk Photo Import:**
-    *   **Logic:** Matches filenames (e.g., `621234.jpg`) to Student Roll Numbers.
-    *   **High-Res Analysis:** Extracts facial features from the **RAW** image file *before* compression to ensure maximum accuracy.
-    *   **Compression:** Compresses image to 600x600 JPEG (80%) for storage *after* analysis.
-    *   **Workflow:** Reports "Success", "Skipped (Already exists)", and "Analysis Failed (Blurry)". Allows "Overwrite & Re-import" for skipped files.
+    *   *Mechanism:* Accepts multiple files. Filename must match Roll Number (e.g., `421122.jpg`).
+    *   *High-Res Pipeline:* Extracts features from the raw file *before* compression to ensure 100% accuracy, then compresses the image to 600x600 JPEG for storage.
 
-### 3.4. The Outing Kiosk
-*   **File:** `components/OutingKiosk.tsx`
-*   **Purpose:** The primary interface for students.
-*   **Blind Spot Protection:** Before allowing a Check-Out, the system performs a deep DB query (`findAnyActiveOutingForStudent`) to ensure the student isn't already out (even if the log is old and not in the local cache).
-*   **Retry Logic:** Allows 3 scan attempts before locking and suggesting manual entry.
+### 5.3 The Kiosk (Biometric Interface) (`components/OutingKiosk.tsx`)
+*   **Purpose:** Unattended student terminal.
+*   **Workflow:**
+    1.  Student selects "Local" or "Non-Local".
+    2.  Student clicks "Check Out" or "Check In".
+    3.  **Camera Preview:** Waits for hardware readiness -> 1s Countdown -> Capture.
+    4.  **Processing:** Extracts vector -> Finds Match.
+    5.  **Feedback:** 
+        *   *Visual:* Success Modal with Name/Roll No.
+        *   *Audio:* A specific 1000Hz frequency "Beep" generated via Web Audio API.
+    6.  **Blind-Spot Check:** Before checking out, it queries the server to ensure the student isn't *already* marked as OUT in a previous session.
 
-### 3.5. The Logbook
-*   **File:** `components/Logbook.tsx`
-*   **Views:**
-    *   **Live:** Last 7 days + Active.
-    *   **Archive:** Date-range search (Server-side query).
-*   **Manual Entry:** Searchable dropdown to manually check in/out students who fail biometrics.
-*   **Bulk Delete (Admin Only):**
-    *   **Requirement:** Admin must first **Export** the data to Excel.
-    *   **Security:** Requires entering the PIN `200405` to confirm deletion.
-    *   **Scope:** Options for "Older than 3 months", "6 months", "1 year".
+### 5.4 The Logbook (`components/Logbook.tsx`)
+*   **Live View:** Shows logs from the last 7 days.
+*   **Archive Search:** Date-picker to query historical data from months/years ago.
+*   **Manual Entry:** Search bar allows security to manually check-in students who fail biometric scan (due to injury or lighting).
+*   **Bulk Delete (Admin):**
+    *   *Security:* Requires a 6-digit PIN (`200405`).
+    *   *Safety:* Enforces an Excel Export of data before allowing deletion.
+    *   *Options:* Delete logs older than 3 months, 6 months, or 1 year.
 
-### 3.6. Visitor Management
-*   **File:** `components/VisitorGatePass.tsx`
-*   **Pass Generation:** Auto-generates Pass IDs (e.g., `V-20231124-001`).
-*   **Printing:**
-    *   **Standard:** A5/A4 layout.
-    *   **Thermal:** Optimized 80mm CSS layout with zero margins for POS printers.
-*   **Tracking:** "Mark Out" button stamps timestamp and Out Gate.
-
----
-
-## 4. Key Functions & Services
-
-### `services/firebaseService.ts`
-*   **`addStudentsBatch(students)`**: Splits an array of 2000 students into batches of 450 and commits them sequentially to prevent crashes.
-*   **`updateStudentsBatch(updates)`**: Handles bulk overwrites safely.
-*   **`onOutingLogsUpdate(callback)`**: Merges "Recent" (7 days) and "Active" (Status=Out) queries into a single unified stream.
-*   **`getArchivedOutingLogs(start, end)`**: Performs compound queries for historical data.
-
-### `services/facialRecognitionService.ts`
-*   **`loadModels()`**: Asynchronously loads SSD MobileNet and ResNet weights.
-*   **`extractFaceFeatures(base64)`**: Returns the 128-float array.
-*   **`findBestMatch(image, students)`**:
-    *   Iterates through all ~2500 students.
-    *   Calculates Euclidean Distance.
-    *   Applies **Confidence Gap** logic: `(2ndBest - Best) < 0.05 ? Reject : Accept`.
-
-### `services/reportGeneratorService.ts`
-*   **`generatePdfReport(data)`**:
-    *   Fetches Logo (Base64).
-    *   Draws Header (NIT Andhra Pradesh).
-    *   Draws Stat Cards (Rectangles + Text).
-    *   Generates Tables (AutoTable) with conditional formatting (Red for Overdue).
-    *   Saves as `OUTING_REPORT_YYYY-MM-DD.pdf`.
+### 5.5 Visitor Gate Pass (`components/VisitorGatePass.tsx`)
+*   **Entry Form:** Captures visitor photo, vehicle no, and host details.
+*   **Print Pass:**
+    *   *Standard:* A4/A5 format.
+    *   *Thermal:* Special CSS layout (`80mm` width, zero margin) for POS receipt printers.
+*   **Mark Out:** Stamps the exit time for visitors leaving campus.
 
 ---
 
-## 5. File Manifest
+## CHAPTER 6: IMPLEMENTATION DETAILS
 
-| File Path | Description |
-| :--- | :--- |
-| `App.tsx` | Main entry point. Handles Routing, Auth state, Global Context, and Kiosk Mode. |
-| `types.ts` | TypeScript interfaces for Student, OutingRecord, VisitorPassRecord, User. |
-| `constants.ts` | Static data: Branches, Hostels, Dropdown options. |
-| `firebase.ts` | Firebase App initialization and exports (Auth, DB, Storage). |
-| `services/firebaseService.ts` | CRUD operations, Real-time listeners, Batching logic. |
-| `services/facialRecognitionService.ts` | AI model loading, Feature extraction, Math logic for matching. |
-| `services/reportGeneratorService.ts` | PDF generation logic. |
-| `components/Login.tsx` | Gate login screen. |
-| `components/Header.tsx` | Navigation bar. |
-| `components/Footer.tsx` | Copyright footer. |
-| `components/Dashboard.tsx` | Analytics, Charts, Report Trigger. |
-| `components/RegisterStudent.tsx` | Single/Bulk Registration forms. |
-| `components/OutingKiosk.tsx` | Student-facing scanner interface. |
-| `components/Logbook.tsx` | Master record view, Archive search, Manual Entry. |
-| `components/AllStudents.tsx` | Student database view, Edit/Delete, Bulk Selection. |
-| `components/VisitorGatePass.tsx` | Visitor entry forms and logbook. |
-| `components/GatePassPreviewModal.tsx` | Printable preview for visitor passes. |
-| `components/EditStudentModal.tsx` | Form to edit student details/photo. |
-| `components/StudentProfileModal.tsx` | Read-only student details view. |
-| `components/StudentListModal.tsx` | Generic list view for dashboard clicks. |
-| `components/CameraCapture.tsx` | Webcam handling component. |
-| `components/CustomSelect.tsx` | Reusable styled dropdown. |
-| `components/Modal.tsx` | Reusable modal wrapper. |
-| `components/Alert.tsx` | Reusable notification banner. |
-| `components/Spinner.tsx` | Loading indicator. |
-| `components/ConfirmationModal.tsx` | Generic "Are you sure?" dialog. |
-| `components/RemarksModal.tsx` | Dialog to add/edit remarks. |
-| `components/ViewRemarksModal.tsx` | Read-only remarks view. |
-| `components/charts/*.tsx` | Wrapper components for Chart.js (Bar, Line, Doughnut). |
+### 6.1 Smart Batching (Congestion Control)
+To handle bulk imports of 2000+ students without crashing the browser or hitting Firestore's 500-write limit, we implemented **Chunking** in `services/firebaseService.ts`.
+*   The array is split into chunks of **450 records**.
+*   Each chunk is sent as a separate atomic batch.
+*   The system awaits confirmation before sending the next chunk.
+
+### 6.2 Programmatic PDF Generation
+Instead of taking a screenshot (which causes resolution loss), we use `jspdf` to draw the report.
+*   **Vector Drawing:** Lines, Rectangles, and Text are drawn using X,Y coordinates.
+*   **Data Binding:** The `autoTable` plugin binds JSON data to grid structures dynamically, calculating row heights based on content.
+
+### 6.3 Security Hardening
+*   **PIN Verification:** Sensitive actions (Deletion, Edit Remarks) trigger a modal requiring a PIN. This is verified client-side before the database call is constructed.
+*   **Role-Based Access Control (RBAC):** The `role` context ensures that "Security" users cannot see "Admin" buttons (like Bulk Delete), providing UI-level security.
 
 ---
 
-## 6. Security Protocols
+## CHAPTER 7: IMPACT ANALYSIS
 
-1.  **PIN Protection:** The PIN `200405` is hardcoded into `Logbook.tsx`, `AllStudents.tsx`, and `VisitorGatePass.tsx`. It acts as a client-side check before calling destructive Firebase functions.
-2.  **Role-Based Rendering:** Components check `role === 'admin'` before rendering Delete buttons or Bulk Import tools.
-3.  **Data Isolation:** "Security" role users cannot see or access the "Bulk Delete" features even if they knew the URL (protected by component logic).
+### 7.1 Advantages for NIT Andhra Pradesh
+1.  **Administrative Efficiency:** Reduces report generation time from hours to seconds.
+2.  **Security:** Biometric data is non-transferable, eliminating proxy outings.
+3.  **Transparency:** Parents/Wardens can be given access to logs (future scope).
+4.  **Data Integrity:** Cloud storage prevents physical logbook damage or loss.
+5.  **Analytics:** Helps administration understand peak outing times and hostel occupancy trends.
+
+### 7.2 Disadvantages & Limitations
+1.  **Lighting Dependency:** Optical facial recognition accuracy drops in extremely low light or strong backlight.
+2.  **Hardware Cost:** Requires a dedicated PC/Tablet and decent webcam at every gate.
+3.  **Connectivity:** Requires active internet connection to sync with Firebase (though PWA caching exists).
+
+---
+
+## CHAPTER 8: FUTURE SCOPE
+
+To further evolve this project for an M.Tech or PhD level implementation, the following expansions are proposed:
+
+1.  **Hardware Integration (IoT):** Use Raspberry Pi GPIO pins to trigger a **Solenoid Lock** or **Turnstile** immediately upon successful `playSuccessSound()`. This creates a physical barrier.
+2.  **Liveness Detection:** Implement "Blink Detection" or "Depth Sensing" (using IR cameras) to prevent spoofing using photographs of students.
+3.  **SMS/WhatsApp Integration:** Use Twilio or WhatsApp Business API to trigger automated alerts to parents when a student checks out for a "Non-Local" trip.
+4.  **Offline Edge Sync:** Implement a local CouchDB/SQLite database that syncs with Firebase only when internet is available, allowing fully offline operation.
+5.  **ANPR (Automatic Number Plate Recognition):** Integrate OCR to automatically read Vehicle Numbers for the Visitor Pass module.
+6.  **Predictive Analytics:** Use Python (Scikit-Learn) on the backend to predict "Overdue Risk" based on a student's past history.
+7.  **Mobile App:** Develop a React Native version for security guards to perform spot-checks anywhere on campus.
+
+---
+
+## CHAPTER 9: CONCLUSION
+
+The Smart Student Outing Management System represents a significant leap from analog to digital campus administration. By successfully integrating Biometric Signal Processing with Enterprise Cloud Architecture, the system provides a secure, scalable, and user-friendly solution for NIT Andhra Pradesh. It addresses the core issues of manual logging while laying the groundwork for a future smart-campus ecosystem.
+
+**References:**
+1.  *Google Firebase Documentation (Firestore, Auth, Functions).*
+2.  *TensorFlow.js & face-api.js Model Architecture papers.*
+3.  *ResNet-34: Deep Residual Learning for Image Recognition (He et al.).*
+4.  *MobileNet: Efficient Convolutional Neural Networks for Mobile Vision Applications.*
+
+---
+*End of Report*

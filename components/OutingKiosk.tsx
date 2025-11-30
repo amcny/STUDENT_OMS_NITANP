@@ -1,5 +1,4 @@
 
-
 import React, { useState, useContext } from 'react';
 import { OutingType, OutingRecord, Student } from '../types';
 import { AppContext } from '../App';
@@ -16,6 +15,37 @@ const MAX_SCAN_ATTEMPTS = 3;
 interface OutingKioskProps {
     gate: string;
 }
+
+// --- Audio Feedback Utility ---
+const playSuccessSound = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+
+    const ctx = new AudioContext();
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    // Create a distinct "Beep" sound (Monotonic)
+    oscillator.type = 'sine';
+    // Constant frequency 1000Hz
+    oscillator.frequency.setValueAtTime(1000, ctx.currentTime);
+
+    // Short, sharp envelope
+    gainNode.gain.setValueAtTime(0, ctx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.01); // Quick attack
+    gainNode.gain.setValueAtTime(0.15, ctx.currentTime + 0.1); // Sustain
+    gainNode.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.15); // Quick release
+
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + 0.2);
+  } catch (e) {
+    console.error("Audio playback failed", e);
+  }
+};
 
 const OutingKiosk: React.FC<OutingKioskProps> = ({ gate }) => {
   const { students, outingLogs } = useContext(AppContext);
@@ -68,6 +98,9 @@ const OutingKiosk: React.FC<OutingKioskProps> = ({ gate }) => {
         setIsLoading(false);
         return;
     }
+
+    // Success! Play Sound
+    playSuccessSound();
 
     setFacialScanAttempts(0);
     setScanFailed(false);

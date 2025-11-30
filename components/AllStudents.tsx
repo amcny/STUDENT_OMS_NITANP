@@ -1,5 +1,3 @@
-
-
 import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
 import { AppContext } from '../App';
 import { Student, View } from '../types';
@@ -141,9 +139,16 @@ const AllStudents: React.FC<AllStudentsProps> = ({ onViewChange }) => {
         }
         
         if (searchTerm) {
-             return Object.values(student).some(value =>
-                String(value).toLowerCase().includes(searchTerm.toLowerCase())
-            );
+             const term = searchTerm.toLowerCase();
+             // Search strictly on visible text fields to avoid false positives from Image Base64 data
+             return (
+                student.name.toLowerCase().includes(term) ||
+                student.rollNumber.toLowerCase().includes(term) ||
+                (student.branch && student.branch.toLowerCase().includes(term)) ||
+                (student.hostel && student.hostel.toLowerCase().includes(term)) ||
+                (student.roomNumber && student.roomNumber.toLowerCase().includes(term)) ||
+                (student.contactNumber && student.contactNumber.includes(term))
+             );
         }
         return true;
     });
